@@ -204,6 +204,68 @@ class USER_CONTENT(Feature):
         self.valid = self.valid[create_feats]
 
 
+class USER_BUNDLE(Feature):
+    def user_content_past_features(self,df,answered_correctly_sum_u_c_dict, count_u_c_dict):
+        acsu = np.zeros(len(df), dtype=np.int32)
+        cu = np.zeros(len(df), dtype=np.int32)
+        for cnt,row in enumerate(tqdm(df[['user_id_bundle',TARGET]].values)):
+            acsu[cnt] = answered_correctly_sum_u_c_dict[row[0]]
+            cu[cnt] = count_u_c_dict[row[0]]
+            answered_correctly_sum_u_c_dict[row[0]] += row[1]
+            count_u_c_dict[row[0]] += 1
+        user_feats_df = pd.DataFrame({'answered_correctly_sum_user_bundle':acsu, 'count_user_bundle':cu})
+        user_feats_df['answered_correctly_avg_user_bundle'] = user_feats_df['answered_correctly_sum_user_bundle'] / user_feats_df['count_user_bundle']
+        df = pd.concat([df, user_feats_df], axis=1)
+        return df
+
+
+    def create_features(self):
+        create_feats = ['answered_correctly_avg_user_bundle','answered_correctly_sum_user_bundle','count_user_bundle']
+
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
+        self.train['user_id_bundle'] = self.train['user_id'].astype(str) + '-' + self.train['bundle_id'].astype(str)
+        self.valid['user_id_bundle'] = self.valid['user_id'].astype(str) + '-' + self.valid['bundle_id'].astype(str)
+        answered_correctly_sum_u_c_dict = defaultdict(int)
+        count_u_c_dict = defaultdict(int)
+
+        self.train = self.user_content_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
+        self.valid = self.user_content_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
+
+class USER_TAGS(Feature):
+    def user_content_past_features(self,df,answered_correctly_sum_u_c_dict, count_u_c_dict):
+        acsu = np.zeros(len(df), dtype=np.int32)
+        cu = np.zeros(len(df), dtype=np.int32)
+        for cnt,row in enumerate(tqdm(df[['user_id_tags1',TARGET]].values)):
+            acsu[cnt] = answered_correctly_sum_u_c_dict[row[0]]
+            cu[cnt] = count_u_c_dict[row[0]]
+            answered_correctly_sum_u_c_dict[row[0]] += row[1]
+            count_u_c_dict[row[0]] += 1
+        user_feats_df = pd.DataFrame({'answered_correctly_sum_user_tags1':acsu, 'count_user_tags1':cu})
+        user_feats_df['answered_correctly_avg_user_tags1'] = user_feats_df['answered_correctly_sum_user_tags1'] / user_feats_df['count_user_tags1']
+        df = pd.concat([df, user_feats_df], axis=1)
+        return df
+
+
+    def create_features(self):
+        create_feats = ['answered_correctly_avg_user_tags1','answered_correctly_sum_user_tags1','count_user_tags1']
+
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
+        self.train['user_id_tags1'] = self.train['user_id'].astype(str) + '-' + self.train['tags1'].astype(str)
+        self.valid['user_id_tags1'] = self.valid['user_id'].astype(str) + '-' + self.valid['tags1'].astype(str)
+        answered_correctly_sum_u_c_dict = defaultdict(int)
+        count_u_c_dict = defaultdict(int)
+
+        self.train = self.user_content_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
+        self.valid = self.user_content_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
+
 
 
 class TAGS(Feature):
