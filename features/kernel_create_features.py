@@ -6,7 +6,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from base_create_features import Feature, get_arguments, generate_features
 from pathlib import Path
-Feature.dir = 'features/mini_data'
+Feature.dir = 'features/data'
 
 TARGET = 'answered_correctly'
 
@@ -36,8 +36,8 @@ class BASE(Feature):
 
     def create_features(self):
         self.train = pd.read_feather('./data/input/train.feather')
-        train_index = pd.read_feather('./data/train_valid/cv37_train.feather')
-        valid_index = pd.read_feather('./data/train_valid/cv37_valid.feather')
+        train_index = pd.read_feather('./data/train_valid/cv1_train.feather')
+        valid_index = pd.read_feather('./data/train_valid/cv1_valid.feather')
 
         qs = pd.read_csv('./data/input/questions.csv')
         lc = pd.read_csv('./data/input/lectures_new.csv')
