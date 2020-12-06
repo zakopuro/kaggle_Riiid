@@ -23,23 +23,15 @@ CAT_FEATURES = ['part','tags1','tags2','tags3','tags4','tags5','tags6','content_
 
 def run_lgb(train_x,train_y,valid_x,valid_y,LOG):
     lgb_params = {
-        'boosting_type': 'gbdt',
-        'objective': "binary",
-        'metric': 'auc',
-        'learning_rate': 0.1,
-        'num_leaves': 2**6,
-        'max_depth': 8,
-        'colsample_bytree': 0.7,
-        'min_child_samples': 100,
-        'subsample': 0.7, # ideally  it can be sqrt(number of features)/(number of features)
-        'num_threads': 8, # real_cores
-        'seed': 127,
-        'first_metric_only': True,
-        'use_two_round_loading': True,
-        'max_bin':128,
-        'verbose': -1,
-        'early_stopping_rounds': 50
-    }
+                'n_estimators': 24000,
+                'objective': 'binary',
+                'boosting_type': 'gbdt',
+                'metric': 'auc',
+                'max_depth': 7,
+                'learning_rate': 0.08,
+                'seed': 127,
+                'early_stopping_rounds': 300
+            }
 
     lgb_train = lgb.Dataset(train_x, train_y)
     lgb_eval = lgb.Dataset(valid_x, valid_y)
@@ -85,9 +77,10 @@ def main():
     valid_x = valid_df[USE_COLS]
     valid_y = valid_df[TARGET]
 
-    lgb_model,fi, = run_lgb(train_x=train_x,train_y=train_y,valid_x=valid_x,valid_y=valid_y,LOG=LOG)
+    lgb_model,fi = run_lgb(train_x=train_x,train_y=train_y,valid_x=valid_x,valid_y=valid_y,LOG=LOG)
 
     data_util.seve_model(lgb_model,fi,file_name)
+
 
 
 

@@ -10,36 +10,28 @@ from utils import data_util,logger
 
 
 feature_list = ['BASE','PART','USER_ID','CONTENT']
-USE_COLS_BASE = ['timestamp','content_id','content_type_id','task_container_id','prior_question_elapsed_time','prior_question_had_explanation','bundle_id',\
-                'part','tags1','tags2','tags3','tags4','tags5','tags6']
+USE_COLS_BASE = ['content_id','task_container_id','prior_question_elapsed_time','prior_question_had_explanation','bundle_id',\
+                'part','tags1','tags2','tags3']
 USE_COLS_PART = ['user_part_mean','user_part_sum','part_ans_mean']
 USE_COLS_USER_ID = ['past_correctly_sum','past_not_correctly_sum','past_correctly_mean']
 USE_COLS_CONTENT = ['content_id_ans_mean','content_id_num']
 USE_COLS = USE_COLS_BASE + USE_COLS_PART + USE_COLS_USER_ID + USE_COLS_CONTENT
 TARGET = 'answered_correctly'
 
-CAT_FEATURES = ['part','tags1','tags2','tags3','tags4','tags5','tags6','content_id','content_type_id','task_container_id','prior_question_had_explanation','bundle_id']
+CAT_FEATURES = ['part','tags1','tags2','tags3','content_id','task_container_id','prior_question_had_explanation','bundle_id']
 
 
 def run_lgb(train_x,train_y,valid_x,valid_y,LOG):
     lgb_params = {
-        'boosting_type': 'gbdt',
-        'objective': "binary",
-        'metric': 'auc',
-        'learning_rate': 0.1,
-        'num_leaves': 2**6,
-        'max_depth': 8,
-        'colsample_bytree': 0.7,
-        'min_child_samples': 100,
-        'subsample': 0.7, # ideally  it can be sqrt(number of features)/(number of features)
-        'num_threads': 8, # real_cores
-        'seed': 127,
-        'first_metric_only': True,
-        'use_two_round_loading': True,
-        'max_bin':128,
-        'verbose': -1,
-        'early_stopping_rounds': 50
-    }
+                'n_estimators': 24000,
+                'objective': 'binary',
+                'boosting_type': 'gbdt',
+                'metric': 'auc',
+                'max_depth': 7,
+                'learning_rate': 0.08,
+                'seed': 127,
+                'early_stopping_rounds': 100
+            }
 
     lgb_train = lgb.Dataset(train_x, train_y)
     lgb_eval = lgb.Dataset(valid_x, valid_y)
@@ -57,7 +49,7 @@ def run_lgb(train_x,train_y,valid_x,valid_y,LOG):
     fi['features'] = train_x.columns.values.tolist()
     fi['importance'] = model.feature_importance(importance_type="gain")
 
-    return model,fi
+    return model,fi,val_pred
 
 
 def main():
@@ -85,9 +77,13 @@ def main():
     valid_x = valid_df[USE_COLS]
     valid_y = valid_df[TARGET]
 
-    lgb_model,fi, = run_lgb(train_x=train_x,train_y=train_y,valid_x=valid_x,valid_y=valid_y,LOG=LOG)
+    lgb_model,fi,valid_df['pred'] = run_lgb(train_x=train_x,train_y=train_y,valid_x=valid_x,valid_y=valid_y,LOG=LOG)
 
     data_util.seve_model(lgb_model,fi,file_name)
+
+    valid_df[['user_id','pred']]
+
+
 
 
 

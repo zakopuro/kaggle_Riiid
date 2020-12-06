@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
+import xgboost as xgb
 from sklearn.metrics import roc_auc_score
 import os
 import time
@@ -21,41 +22,39 @@ TARGET = 'answered_correctly'
 CAT_FEATURES = ['part','tags1','tags2','tags3','tags4','tags5','tags6','content_id','content_type_id','task_container_id','prior_question_had_explanation','bundle_id']
 
 
-def run_lgb(train_x,train_y,valid_x,valid_y,LOG):
-    lgb_params = {
-        'boosting_type': 'gbdt',
-        'objective': "binary",
-        'metric': 'auc',
-        'learning_rate': 0.1,
-        'num_leaves': 2**6,
-        'max_depth': 8,
-        'colsample_bytree': 0.7,
-        'min_child_samples': 100,
-        'subsample': 0.7, # ideally  it can be sqrt(number of features)/(number of features)
-        'num_threads': 8, # real_cores
-        'seed': 127,
-        'first_metric_only': True,
-        'use_two_round_loading': True,
-        'max_bin':128,
-        'verbose': -1,
-        'early_stopping_rounds': 50
-    }
+def run_xgb(train_x,train_y,valid_x,valid_y,LOG):
+    xgb_params = {
+                'objective': 'binary:logistic',
+                'eval_metric':'auc',
+                'num_boost_round':24000,
+                'max_depth':7,
+                'learning_rate':0.08,
+                'subsample':0.85,
+                'colsample_bytree':0.85,
+                'tree_method':'gpu_hist',  # THE MAGICAL PARAMETER
+                # 'gpu_id':1,
+                'reg_alpha':0.15,
+                'reg_lamdba':0.85,
+                'early_stopping_rounds':50
+            }
 
-    lgb_train = lgb.Dataset(train_x, train_y)
-    lgb_eval = lgb.Dataset(valid_x, valid_y)
+    # lgb_train = lgb.Dataset(train_x, train_y)
+    # lgb_eval = lgb.Dataset(valid_x, valid_y)
+    xgb_train = xgb.DMatrix(train_x, label=train_y)
+    xgb_eval = xgb.DMatrix(valid_x, label=valid_y)
     LOG.info('start lgb train')
     t0 = time.time()
-    model = lgb.train(lgb_params, lgb_train, valid_sets=[lgb_train, lgb_eval], verbose_eval=10,categorical_feature=CAT_FEATURES)
+    model = xgb.train(params=xgb_params, dtrain=xgb_train, evals=[(xgb_train,'Train'), (xgb_eval,'Val')], verbose_eval=10)
     LOG.info(f'end lgb train : {time.time() - t0} s')
 
-    val_pred = model.predict(valid_x)
+    val_pred = model.predict(xgb_eval)
     score = roc_auc_score(valid_y, val_pred)
     LOG.info(f"AUC = {score}")
 
     # feature importance
     fi = pd.DataFrame()
-    fi['features'] = train_x.columns.values.tolist()
-    fi['importance'] = model.feature_importance(importance_type="gain")
+    # fi['features'] = train_x.columns.values.tolist()
+    # fi['importance'] = model.feature_importances_(importance_type="gain")
 
     return model,fi
 
@@ -85,9 +84,10 @@ def main():
     valid_x = valid_df[USE_COLS]
     valid_y = valid_df[TARGET]
 
-    lgb_model,fi, = run_lgb(train_x=train_x,train_y=train_y,valid_x=valid_x,valid_y=valid_y,LOG=LOG)
+    lgb_model,fi = run_xgb(train_x=train_x,train_y=train_y,valid_x=valid_x,valid_y=valid_y,LOG=LOG)
 
     data_util.seve_model(lgb_model,fi,file_name)
+
 
 
 

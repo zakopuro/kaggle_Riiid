@@ -1,1 +1,1 @@
-FROM gcr.io/kaggle-images/python:PR-873-pretest
+FROM kaggle/python-gpu-build

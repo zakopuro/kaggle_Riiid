@@ -43,9 +43,9 @@ class Feature(metaclass=ABCMeta):
     def __init__(self):
         self.name = self.__class__.__name__
         self.train = pd.DataFrame()
-        # self.test = pd.DataFrame()
+        self.test = pd.DataFrame()
         self.train_path = Path(self.dir) / f'{self.name}_train.feather'
-        # self.test_path = Path(self.dir) / f'{self.name}_test.feather'
+        self.test_path = Path(self.dir) / f'kaggle_kernel/{self.name}_test.feather'
         print(self.train_path)
 
     def run(self):
