@@ -20,11 +20,15 @@ def _label_encoder(data):
     return l_data
 
 
-# def target_encoding(data,col):
-#     group_cols =
-#     data[''] = train.groupby([TARGET,]).mean()
+# リークしているけどある程度は仕方ないか。
+def target_encoding(data,feature_list):
+    group_feature = feature_list.copy()
+    group_feature += TARGET
+    feature_name = '-'.join(feature_list)
+    mean_data = data[group_feature].groupby(feature_list).mean()
+    mean_data.columns = [f'{feature_name}_mean']
 
-
+    return mean_data
 
 class BASE(Feature):
 
@@ -57,14 +61,20 @@ class USER_ID(Feature):
     def create_features(self):
         create_cols = ['past_correctly_sum','past_not_correctly_sum','past_correctly_mean']
         self.train = pd.read_feather('./features/data/BASE_train.feather')
-        self.train = self.train[['user_id','answered_correctly']]
-        encoded = (self.train.groupby('user_id')['answered_correctly']
+        self.train = self.train[['user_id',TARGET]]
+        encoded = (self.train.groupby('user_id')[TARGET]
                    .expanding().agg(['mean','sum','count']).groupby('user_id').shift(1))
         encoded.columns = ['past_correctly_mean','past_correctly_sum','count']
         encoded['past_not_correctly_sum'] = encoded['count'] - encoded['past_correctly_sum']
-
         encoded = encoded.reset_index(drop=True)
+
+        self.test = self.train.groupby('user_id')[TARGET].agg(['mean','sum','count'])
+        self.test.columns = ['past_correctly_mean','past_correctly_sum','count']
+        self.test['past_not_correctly_sum'] = self.test['count'] - self.test['past_correctly_sum']
+
+        self.test = self.test.reset_index()[['user_id']+create_cols]
         self.train = encoded[create_cols]
+
 
 
 
@@ -73,25 +83,44 @@ class PART(Feature):
 
     def create_features(self):
         # 少しリークしているが、これくらいならOK判断
-        create_cols = ['user_part_mean','user_part_sum','part_ans_mean']
+        create_cols = ['part_ans_mean']
         self.train = pd.read_feather('./features/data/BASE_train.feather')
-        self.train = self.train[['user_id','answered_correctly','part']]
-        part_ans_mean = self.train[['part','answered_correctly']].groupby('part').mean()
+        self.train = self.train[[TARGET,'part']]
+        part_ans_mean = self.train[['part',TARGET]].groupby('part').mean()
         part_ans_mean.columns = ['part_ans_mean']
+        self.test = part_ans_mean
         self.train = pd.merge(self.train,part_ans_mean,on='part',how='left')
         del part_ans_mean
         gc.collect()
 
-        encoded = (self.train.groupby(['user_id','part'])['answered_correctly']
+        self.test = self.test.reset_index()[['part']+create_cols]
+        self.train = self.train[create_cols]
+
+class USER_PART(Feature):
+
+    def create_features(self):
+        create_cols = ['user_part_mean','user_part_sum']
+
+        self.train = pd.read_feather('./features/data/BASE_train.feather')
+        self.train = self.train[['user_id',TARGET,'part']]
+
+        encoded = (self.train.groupby(['user_id','part'])[TARGET]
                    .expanding().agg(['mean','sum']).groupby('user_id').shift(1))
         encoded = encoded.reset_index().sort_values('level_2').reset_index(drop=True)
         encoded.columns = ['user_id','part','level_2','user_part_mean','user_part_sum']
+
+
+        self.test = self.train.groupby(['user_id','part'])[TARGET].agg(['mean','sum'])
+        self.test.columns = ['user_part_mean','user_part_sum']
 
         self.train = pd.concat([self.train,encoded[['user_part_mean', 'user_part_sum']]],axis=1)
         del encoded
         gc.collect()
 
+        self.test = self.test.reset_index()[['user_id','part']+create_cols]
         self.train = self.train[create_cols]
+
+
 
 
 class CONTENT(Feature):
@@ -101,19 +130,30 @@ class CONTENT(Feature):
         create_cols = ['content_id_ans_mean','content_id_num']
         # TODO ,'content_id_user_mean', 'content_id_user_sum'
         self.train = pd.read_feather('./features/data/BASE_train.feather')
-        self.train = self.train[['user_id','answered_correctly','content_id']]
-        content_ans_mean = self.train[['content_id','answered_correctly']].groupby('content_id').mean()
+        self.train = self.train[[TARGET,'content_id']]
+        content_ans_mean = self.train[['content_id',TARGET]].groupby('content_id')[TARGET].agg(['mean','sum'])
         content_ans_mean.columns = ['content_id_ans_mean']
+        self.test = content_ans_mean
+
         content_sum = pd.DataFrame(self.train['content_id'].value_counts().sort_values(ascending=False)).reset_index()
         content_sum.columns = ['content_id','content_id_num']
 
+        self.test = pd.merge(self.test,content_sum,on='content_id',how='left')
         self.train = pd.merge(self.train,content_ans_mean,on='content_id',how='left')
         self.train = pd.merge(self.train,content_sum,on='content_id',how='left')
         del content_ans_mean,content_sum
         gc.collect()
 
+        self.test = self.test.reset_index()[['content_id']+create_cols]
+        self.train = self.train[create_cols]
+
+
+# class USER_CONTENT(Feature):
+
+#     def create_features(self):
+#         self.train = pd.read_feather('./features/data/BASE_train.feather')
         # メモリ不足なので他の方法を考える
-        # encoded = (self.train.groupby(['user_id','content_id'])['answered_correctly']
+        # encoded = (self.train.groupby(['user_id','content_id'])[TARGET]
         #         .expanding().agg(['mean','sum']).groupby('content_id').shift(1))
         # encoded = encoded.reset_index().sort_values('level_2').reset_index(drop=True).fillna(0)
         # encoded.columns = ['user_id', 'content_id', 'level_2', 'content_id_user_mean', 'content_id_user_sum']
@@ -121,29 +161,20 @@ class CONTENT(Feature):
         # del encoded
         # gc.collect()
 
-        self.train = self.train[create_cols]
 
 
-class TARGET_ENCODING(Feature):
+# class OTHER_TARGET_ENCODING(Feature):
 
-    def target_encoding(self,data,col_list):
-        encoding_cols = col.copy()
-        encoding_cols += TARGET
+#     def create_features(self):
 
-        feature_name =
-        data[]
+#         self.train = pd.read_feather('./features/data/BASE_train.feather')
+#         create_cols = ['tag1_mean','tag2_mean','bundle_id_mean','bundle_id_tag1_mean','task_container_id_mean']
 
-
-    def create_features(self):
-
-        self.train = pd.read_feather('./features/data/BASE_train.feather')
-        create_cols = ['tag1_mean','tag2_mean','bundle_id_mean','bundle_id_tag1_mean','task_container_id_mean']
-
-        cols = ['tag1','tag2','bundle_id',['bundle_id','tag1'],'task_container_id']
+#         cols = ['tag1','tag2','bundle_id',['bundle_id','tag1'],'task_container_id']
 
 
-        for col in cols:
-            self.target_encoding(self.train,col)
+#         for col in cols:
+#             self.target_encoding(self.train,col)
 
 
 

@@ -5,9 +5,9 @@ import seaborn as sns
 import os
 import numpy as np
 
-def load_features(features_list):
+def load_features(features_list,path,train_valid):
 
-    dfs = [pd.read_feather(f'./features/data/{feature}_train.feather') for feature in features_list]
+    dfs = [pd.read_feather(f'./{path}/{feature}_{train_valid}.feather') for feature in features_list]
     df = pd.concat(dfs,axis=1)
     return df
 

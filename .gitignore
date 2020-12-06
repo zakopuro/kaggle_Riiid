@@ -131,6 +131,7 @@ dmypy.json
 
 data/*
 features/data/*
+features/mini_data/*
 features/fe/*
 models/*
 .vscode

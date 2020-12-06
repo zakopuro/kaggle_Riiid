@@ -43,9 +43,11 @@ class Feature(metaclass=ABCMeta):
     def __init__(self):
         self.name = self.__class__.__name__
         self.train = pd.DataFrame()
+        self.valid = pd.DataFrame()
         self.test = pd.DataFrame()
         self.train_path = Path(self.dir) / f'{self.name}_train.feather'
-        self.test_path = Path(self.dir) / f'kaggle_kernel/{self.name}_test.feather'
+        self.valid_path = Path(self.dir) / f'{self.name}_valid.feather'
+        # self.test_path = Path(self.dir) / f'kaggle_kernel/{self.name}_test.feather'
         print(self.train_path)
 
     def run(self):
@@ -55,6 +57,7 @@ class Feature(metaclass=ABCMeta):
             suffix = '_' + self.suffix if self.suffix else ''
             self.train.columns = prefix + self.train.columns + suffix
             # self.test.columns = prefix + self.test.columns + suffix
+            self.valid.columns = prefix + self.valid.columns + suffix
         return self
 
     @abstractmethod
@@ -63,4 +66,5 @@ class Feature(metaclass=ABCMeta):
 
     def save(self):
         self.train.to_feather(str(self.train_path))
+        self.valid.to_feather(str(self.valid_path))
         # self.test.to_feather(str(self.test_path))
