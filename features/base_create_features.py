@@ -65,6 +65,7 @@ class Feature(metaclass=ABCMeta):
         raise NotImplementedError
 
     def save(self):
-        self.train.to_feather(str(self.train_path))
-        self.valid.to_feather(str(self.valid_path))
+        a = 1
+        # self.train.to_feather(str(self.train_path))
+        # self.valid.to_feather(str(self.valid_path))
         # self.test.to_feather(str(self.test_path))

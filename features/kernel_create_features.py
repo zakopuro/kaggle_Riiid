@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
+import pickle
 import gc
 import os
 from tqdm import tqdm
 from collections import defaultdict
 from base_create_features import Feature, get_arguments, generate_features
 from pathlib import Path
-Feature.dir = 'features/data'
+Feature.dir = 'features/kernel_data'
 
 TARGET = 'answered_correctly'
 
@@ -36,8 +37,6 @@ class BASE(Feature):
 
     def create_features(self):
         self.train = pd.read_feather('./data/input/train.feather')
-        train_index = pd.read_feather('./data/train_valid/cv1_train.feather')
-        valid_index = pd.read_feather('./data/train_valid/cv1_valid.feather')
 
         qs = pd.read_csv('./data/input/questions.csv')
         lc = pd.read_csv('./data/input/lectures_new.csv')
@@ -57,13 +56,9 @@ class BASE(Feature):
         for i in range(1,7):
             self.train[f'tags{i}'] = self.train[f'tags{i}'].astype(float)
 
-        self.valid = self.train[self.train['row_id'].isin(valid_index['row_id'])]
-        self.train = self.train[self.train['row_id'].isin(train_index['row_id'])]
-
-
         self.train = self.train[self.train['content_type_id'] == 0].reset_index(drop=True)
-        self.valid = self.valid[self.valid['content_type_id'] == 0].reset_index(drop=True)
 
+        self.train.to_feather(f'./{Feature.dir}/BASE_train.feather')
 
 class USER_ID(Feature):
 
@@ -83,15 +78,15 @@ class USER_ID(Feature):
     def create_features(self):
         create_feats = ['answered_correctly_avg_user','answered_correctly_sum_user','count_user']
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
         answered_correctly_sum_u_dict = defaultdict(int)
         count_u_dict = defaultdict(int)
-
         self.train = self.user_past_features(self.train, answered_correctly_sum_u_dict, count_u_dict)
-        self.valid = self.user_past_features(self.valid, answered_correctly_sum_u_dict, count_u_dict)
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        with open(f'./{Feature.dir}/user_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_dict,f)
+        with open(f'./{Feature.dir}/user_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_dict,f)
+
 
 
 
@@ -102,28 +97,22 @@ class PART(Feature):
         # 少しリークしているが、これくらいならOK判断
         create_feats = ['answered_correctly_avg_part','reading_part','answered_correctly_avg_reading_part']
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
-        # self.train = self.train[['part',TARGET]]
-        # self.valid = self.valid[['part',TARGET]]
-
         self.train['reading_part'] = 0
-        self.valid['reading_part'] = 0
         self.train.loc[self.train['part'] >=5,'reading_part'] = 1
-        self.valid.loc[self.valid['part'] >=5,'reading_part'] = 1
 
         part_mean = self.train[['part',TARGET]].groupby(['part']).agg(['mean'])
         part_mean.columns = ['answered_correctly_avg_part']
         read_mean = self.train[['reading_part',TARGET]].groupby(['reading_part']).agg(['mean'])
         read_mean.columns = ['answered_correctly_avg_reading_part']
 
-        self.train = pd.merge(self.train, part_mean, on=['part'], how="left")
-        self.valid = pd.merge(self.valid, part_mean, on=['part'], how="left")
+        part_mean = part_mean.reset_index()
+        read_mean = read_mean.reset_index()
 
-        self.train = pd.merge(self.train, read_mean, on=['reading_part'], how="left")
-        self.valid = pd.merge(self.valid, read_mean, on=['reading_part'], how="left")
+        part_mean.to_feather(f'./{Feature.dir}/part_mean.feather')
+        read_mean.to_feather(f'./{Feature.dir}/part_mean.feather')
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+
+        # self.train = self.train[create_feats]
 
 
 class USER_PART(Feature):
@@ -146,17 +135,16 @@ class USER_PART(Feature):
         create_feats = ['answered_correctly_avg_user_part','answered_correctly_sum_user_part','count_user_part']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
         self.train['user_id_part'] = self.train['user_id'].astype(str) + '-' + self.train['part'].astype(str)
-        self.valid['user_id_part'] = self.valid['user_id'].astype(str) + '-' + self.valid['part'].astype(str)
         answered_correctly_sum_u_p_dict = defaultdict(int)
         count_u_p_dict = defaultdict(int)
 
         self.train = self.user_part_past_features(self.train, answered_correctly_sum_u_p_dict, count_u_p_dict)
-        self.valid = self.user_part_past_features(self.valid, answered_correctly_sum_u_p_dict, count_u_p_dict)
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        with open(f'./{Feature.dir}/user_part_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_p_dict,f)
+        with open(f'./{Feature.dir}/user_part_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_p_dict,f)
 
 
 
@@ -165,22 +153,22 @@ class CONTENT(Feature):
     def create_features(self):
         create_feats = ['answered_correctly_avg_content','answered_correctly_sum_content','content_num']
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
 
         content_ans_av_sum = self.train[['content_id',TARGET]].groupby('content_id')[TARGET].agg(['mean','sum'])
         content_ans_av_sum.columns = ['answered_correctly_avg_content','answered_correctly_sum_content']
 
-        self.train = pd.merge(self.train,content_ans_av_sum,on='content_id',how='left')
-        self.valid = pd.merge(self.valid,content_ans_av_sum,on='content_id',how='left')
-
         content_num = pd.DataFrame(self.train['content_id'].value_counts().sort_values(ascending=False)).reset_index()
         content_num.columns = ['content_id','content_num']
 
-        self.train = pd.merge(self.train,content_num,on='content_id',how='left')
-        self.valid = pd.merge(self.valid,content_num,on='content_id',how='left')
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        content_ans_av_sum = content_ans_av_sum.reset_index()
+        content_ans_av_sum.to_feather(f'./{Feature.dir}/content_mean.feather')
+
+        content_num = content_num.reset_index()
+        content_num.to_feather(f'./{Feature.dir}/content_num.feather')
+
+        # self.train = pd.merge(self.train,content_num,on='content_id',how='left')
+
 
 
 class USER_CONTENT(Feature):
@@ -202,17 +190,17 @@ class USER_CONTENT(Feature):
         create_feats = ['answered_correctly_avg_user_content','answered_correctly_sum_user_content','count_user_content']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
         self.train['user_id_content'] = self.train['user_id'].astype(str) + '-' + self.train['content_id'].astype(str)
-        self.valid['user_id_content'] = self.valid['user_id'].astype(str) + '-' + self.valid['content_id'].astype(str)
+
         answered_correctly_sum_u_c_dict = defaultdict(int)
         count_u_c_dict = defaultdict(int)
 
         self.train = self.user_content_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
-        self.valid = self.user_content_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        with open(f'./{Feature.dir}/user_content_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_c_dict,f)
+        with open(f'./{Feature.dir}/user_content_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_c_dict,f)
 
 
 class USER_BUNDLE(Feature):
@@ -234,17 +222,16 @@ class USER_BUNDLE(Feature):
         create_feats = ['answered_correctly_avg_user_bundle','answered_correctly_sum_user_bundle','count_user_bundle']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
         self.train['user_id_bundle'] = self.train['user_id'].astype(str) + '-' + self.train['bundle_id'].astype(str)
-        self.valid['user_id_bundle'] = self.valid['user_id'].astype(str) + '-' + self.valid['bundle_id'].astype(str)
         answered_correctly_sum_u_c_dict = defaultdict(int)
         count_u_c_dict = defaultdict(int)
 
         self.train = self.user_content_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
-        self.valid = self.user_content_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        with open(f'./{Feature.dir}/user_bundle_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_c_dict,f)
+        with open(f'./{Feature.dir}/user_bundle_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_c_dict,f)
 
 class USER_TAGS(Feature):
     def user_content_past_features(self,df,answered_correctly_sum_u_c_dict, count_u_c_dict):
@@ -265,18 +252,16 @@ class USER_TAGS(Feature):
         create_feats = ['answered_correctly_avg_user_tags1','answered_correctly_sum_user_tags1','count_user_tags1']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
         self.train['user_id_tags1'] = self.train['user_id'].astype(str) + '-' + self.train['tags1'].astype(str)
-        self.valid['user_id_tags1'] = self.valid['user_id'].astype(str) + '-' + self.valid['tags1'].astype(str)
+
         answered_correctly_sum_u_c_dict = defaultdict(int)
         count_u_c_dict = defaultdict(int)
 
         self.train = self.user_content_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
-        self.valid = self.user_content_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
-
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
-
+        with open(f'./{Feature.dir}/user_tags_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_c_dict,f)
+        with open(f'./{Feature.dir}/user_tasg_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_c_dict,f)
 
 
 class TAGS(Feature):
@@ -284,16 +269,12 @@ class TAGS(Feature):
     def create_features(self):
         create_feats = ['answered_correctly_avg_tags1']
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
 
         tag1_mean = self.train[['tags1',TARGET]].groupby(['tags1']).agg(['mean'])
         tag1_mean.columns = ['answered_correctly_avg_tags1']
 
-        self.train = pd.merge(self.train, tag1_mean, on=['tags1'], how="left")
-        self.valid = pd.merge(self.valid, tag1_mean, on=['tags1'], how="left")
-
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        tag1_mean = tag1_mean.reset_index()
+        tag1_mean.to_feather(f'./{Feature.dir}/tag1_mean.pkl')
 
 
 class USER_READING_PART(Feature):
@@ -315,42 +296,33 @@ class USER_READING_PART(Feature):
         create_feats = ['answered_correctly_avg_user_reading_part','answered_correctly_sum_user_reading_part','count_user_reading_part']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
-        reading_part_train_df = pd.read_feather(f'./{Feature.dir}/PART_train.feather')
-        reading_part_valid_df = pd.read_feather(f'./{Feature.dir}/PART_valid.feather')
-
-        self.train = pd.concat([self.train,reading_part_train_df],axis=1)
-        self.valid = pd.concat([self.valid,reading_part_valid_df],axis=1)
+        self.train['reading_part'] = 0
+        self.train.loc[self.train['part'] >=5,'reading_part'] = 1
 
         self.train['user_id_reading_part'] = self.train['user_id'].astype(str) + '-' + self.train['reading_part'].astype(str)
-        self.valid['user_id_reading_part'] = self.valid['user_id'].astype(str) + '-' + self.valid['reading_part'].astype(str)
         answered_correctly_sum_u_c_dict = defaultdict(int)
         count_u_c_dict = defaultdict(int)
 
         self.train = self.user_reading_part_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
-        self.valid = self.user_reading_part_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        with open(f'./{Feature.dir}/user_reading_part_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_c_dict,f)
+        with open(f'./{Feature.dir}/user_reading_part_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_c_dict,f)
 
 
 class TYPE_OF(Feature):
     def create_features(self):
         create_feats = ['answered_correctly_avg_type_of']
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
 
         self.train['type_of'] = self.train['type_of'].fillna('NAN')
-        self.valid['type_of'] = self.valid['type_of'].fillna('NAN')
 
         type_mean = self.train[['type_of',TARGET]].groupby('type_of').agg(['mean'])
         type_mean.columns = ['answered_correctly_avg_type_of']
 
-        self.train = pd.merge(self.train,type_mean,on='type_of',how='left')
-        self.valid = pd.merge(self.valid,type_mean,on='type_of',how='left')
-
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        type_mean = type_mean.reset_index()
+        type_mean.to_feather(f'./{Feature.dir}/type_mean.feather')
 
 
 class USER_TYPE_OF(Feature):
@@ -372,21 +344,19 @@ class USER_TYPE_OF(Feature):
         create_feats = ['answered_correctly_avg_user_type_of','answered_correctly_sum_user_type_of','count_user_type_of']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
-        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
 
         self.train['type_of'] = self.train['type_of'].fillna('NAN')
-        self.valid['type_of'] = self.valid['type_of'].fillna('NAN')
 
         self.train['user_id_type_of'] = self.train['user_id'].astype(str) + '-' + self.train['type_of'].astype(str)
-        self.valid['user_id_type_of'] = self.valid['user_id'].astype(str) + '-' + self.valid['type_of'].astype(str)
         answered_correctly_sum_u_c_dict = defaultdict(int)
         count_u_c_dict = defaultdict(int)
 
         self.train = self.user_type_of_part_past_features(self.train, answered_correctly_sum_u_c_dict, count_u_c_dict)
-        self.valid = self.user_type_of_part_past_features(self.valid, answered_correctly_sum_u_c_dict, count_u_c_dict)
 
-        self.train = self.train[create_feats]
-        self.valid = self.valid[create_feats]
+        with open(f'./{Feature.dir}/user_type_of_dict_sum.pkl','wb') as f:
+            pickle.dump(answered_correctly_sum_u_c_dict,f)
+        with open(f'./{Feature.dir}/user_type_of_part_dict_count.pkl','wb') as f:
+            pickle.dump(count_u_c_dict,f)
 
 
 
