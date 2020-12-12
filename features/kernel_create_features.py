@@ -109,7 +109,7 @@ class PART(Feature):
         read_mean = read_mean.reset_index()
 
         part_mean.to_feather(f'./{Feature.dir}/part_mean.feather')
-        read_mean.to_feather(f'./{Feature.dir}/part_mean.feather')
+        read_mean.to_feather(f'./{Feature.dir}/read)part_mean.feather')
 
 
         # self.train = self.train[create_feats]
@@ -274,7 +274,7 @@ class TAGS(Feature):
         tag1_mean.columns = ['answered_correctly_avg_tags1']
 
         tag1_mean = tag1_mean.reset_index()
-        tag1_mean.to_feather(f'./{Feature.dir}/tag1_mean.pkl')
+        tag1_mean.to_feather(f'./{Feature.dir}/tag1_mean.feather')
 
 
 class USER_READING_PART(Feature):
