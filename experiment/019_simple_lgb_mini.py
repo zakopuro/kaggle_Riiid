@@ -16,14 +16,14 @@ else:
     path = 'data'
 
 
-FEATURES_LIST = ['BASE','USER_ID','PART','USER_PART','CONTENT','TAGS','USER_READING_PART','TYPE_OF','USER_TYPE_OF','USER_ID_LECTURE']
+FEATURES_LIST = ['BASE','USER_ID','CONTENT','BUNDLE','TASK_CONTAINER','PART','TAGS1']
 
-USE_COLS = ['answered_correctly_avg_user','prior_question_elapsed_time','prior_question_had_explanation','bundle_id','part','tags1','tags2','tags3','l_type_of','content_id',\
-            'answered_correctly_sum_user','task_container_id','count_user','answered_correctly_avg_part','answered_correctly_avg_content',\
-            'answered_correctly_sum_content','content_num','answered_correctly_avg_tags1',\
-            'answered_correctly_avg_user_reading_part','answered_correctly_sum_user_reading_part','count_user_reading_part','reading_part','answered_correctly_avg_reading_part',\
-            'answered_correctly_avg_type_of']
-
+USE_COLS = ['prior_question_elapsed_time','prior_question_had_explanation','bundle_id','part','tags1','tags2','tags3','l_type_of','content_id','task_container_id',\
+            'answered_correctly_avg_user','answered_correctly_sum_user','count_user','answered_correctly_avg_content','answered_correctly_sum_content','answered_correctly_std_content','content_num',\
+            'answered_correctly_avg_bundle','answered_correctly_sum_bundle','answered_correctly_std_bundle','bundle_num',\
+            'answered_correctly_avg_task_container','answered_correctly_sum_task_container','answered_correctly_std_task_container',\
+            'answered_correctly_avg_part','answered_correctly_sum_part','answered_correctly_std_part',\
+            'answered_correctly_avg_tags1','answered_correctly_sum_tags1','answered_correctly_std_tags1']
 
 TARGET = 'answered_correctly'
 
