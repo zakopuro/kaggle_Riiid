@@ -47,7 +47,7 @@ class Feature(metaclass=ABCMeta):
         self.test = pd.DataFrame()
         self.train_path = Path(self.dir) / f'{self.name}_train.feather'
         self.valid_path = Path(self.dir) / f'{self.name}_valid.feather'
-        self.test_path = Path(self.dir) / f'kernel_data/{self.name}_test.feather'
+        self.test_path = f'./features/kernel_data/{self.name}_test.feather'
         print(self.train_path)
 
     def run(self):
