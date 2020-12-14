@@ -67,5 +67,5 @@ class Feature(metaclass=ABCMeta):
     def save(self):
         self.train.to_feather(str(self.train_path))
         self.valid.to_feather(str(self.valid_path))
-        if len(self.test) > 0:
-            self.test.to_feather(str(self.test_path))
+        # if len(self.test) > 0:
+        #     self.test.to_feather(str(self.test_path))
