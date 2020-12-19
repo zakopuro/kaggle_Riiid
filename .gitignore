@@ -131,6 +131,7 @@ dmypy.json
 
 data/*
 features/kernel_data/*
+features/kernel_mini_data/*
 features/data/*
 features/mini_data/*
 features/fe/*

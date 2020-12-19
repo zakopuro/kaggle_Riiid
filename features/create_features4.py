@@ -104,14 +104,35 @@ class BASE(Feature):
 
         self.test = pd.DataFrame()
 
+class GROUP_BY(Feature):
+
+    def create_features(self):
+        create_feats = ['task_container_count']
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
+
+        self.train['count'] = 1
+        self.valid['count'] = 1
+
+        train_task_container_count = self.train[['user_id','task_container_id','count']].groupby(['user_id','task_container_id']).agg(['count']).reset_index()
+        valid_task_container_count = self.valid[['user_id','task_container_id','count']].groupby(['user_id','task_container_id']).agg(['count']).reset_index()
+        train_task_container_count.columns = ['user_id','task_container_id','task_container_count']
+        valid_task_container_count.columns = ['user_id','task_container_id','task_container_count']
+
+        self.train = pd.merge(self.train,train_task_container_count,on=['user_id','task_container_id'],how='left')
+        self.valid = pd.merge(self.valid,train_task_container_count,on=['user_id','task_container_id'],how='left')
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
+
 
 
 class LOOP(Feature):
 
     def user_feats_update(self,num,row,
                          answered_correctly_u_count_dic,answered_correctly_u_sum_dic,elapsed_time_u_sum_dic,explanation_u_sum_dic, # dic
-                         answered_correctly_u_avg,elapsed_time_u_avg,explanation_u_avg # df
-                         ):
+                         answered_correctly_u_avg,elapsed_time_u_avg,explanation_u_avg, # df
+                         update):
 
 
         if answered_correctly_u_count_dic[row[0]] != 0:
@@ -123,16 +144,16 @@ class LOOP(Feature):
             elapsed_time_u_avg[num] = np.nan
             explanation_u_avg[num] = np.nan
 
-
-        answered_correctly_u_count_dic[row[0]] += 1
-        elapsed_time_u_sum_dic[row[0]] += row[3]
-        explanation_u_sum_dic[row[0]] += int(row[4])
+        if update:
+            answered_correctly_u_count_dic[row[0]] += 1
+            elapsed_time_u_sum_dic[row[0]] += row[3]
+            explanation_u_sum_dic[row[0]] += int(row[4])
 
 
     def update_time_stamp_user(self,num,row,
                                 timestamp_u,timestamp_u_incorrect_dic,timestamp_u_incorrect_recency_dic, # dic
-                                timestamp_u_recency_1,timestamp_u_recency_2,timestamp_u_recency_3        # df
-                                ):
+                                timestamp_u_recency_1,timestamp_u_recency_2,timestamp_u_recency_3,        # df
+                                update):
         if len(timestamp_u[row[0]]) == 0:
             timestamp_u_recency_1[num] = np.nan
             timestamp_u_recency_2[num] = np.nan
@@ -155,17 +176,17 @@ class LOOP(Feature):
         else:
             timestamp_u_incorrect_recency_dic[num] = row[5] - timestamp_u_incorrect_dic[row[0]][0]
 
-
-        if len(timestamp_u[row[0]]) == 3:
-            timestamp_u[row[0]].pop(0)
-            timestamp_u[row[0]].append(row[5])
-        else:
-            timestamp_u[row[0]].append(row[5])
+        if update:
+            if len(timestamp_u[row[0]]) == 3:
+                timestamp_u[row[0]].pop(0)
+                timestamp_u[row[0]].append(row[5])
+            else:
+                timestamp_u[row[0]].append(row[5])
 
     def questions_feats_update(self,num,row,
                                 answered_correctly_q_count_dic,answered_correctly_q_sum_dic,elapsed_time_q_sum_dic,explanation_q_sum_dic, # dic
-                                answered_correctly_q_avg,elapsed_time_q_avg,explanation_q_avg # df
-                                ):
+                                answered_correctly_q_avg,elapsed_time_q_avg,explanation_q_avg, # df
+                                update):
         if answered_correctly_q_count_dic[row[2]] != 0:
             answered_correctly_q_avg[num] = answered_correctly_q_sum_dic[row[2]] / answered_correctly_q_count_dic[row[2]]
             elapsed_time_q_avg[num] = elapsed_time_q_sum_dic[row[2]] / answered_correctly_q_count_dic[row[2]]
@@ -175,22 +196,73 @@ class LOOP(Feature):
             elapsed_time_q_avg[num] = np.nan
             explanation_q_avg[num] = np.nan
 
-        answered_correctly_q_count_dic[row[2]] += 1
-        elapsed_time_q_sum_dic[row[2]] += row[3]
-        explanation_q_sum_dic[row[2]] += int(row[4])
+        if update:
+            answered_correctly_q_count_dic[row[2]] += 1
+            elapsed_time_q_sum_dic[row[2]] += row[3]
+            explanation_q_sum_dic[row[2]] += int(row[4])
 
     def user_questions_feats_update(self,num,row,
-                                    answered_correctly_uq_dic, # dic
-                                    answered_correctly_uq_count # df
-                                    ):
+                                    answered_correctly_uq_count_sum_list_dic, # dic
+                                    answered_correctly_uq_count,answered_correctly_uq_avg, # df
+                                    update):
+        # countがlist[0],sumがlist[1]
+        if len(answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])]) == 0:
+            answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])] = [0,0]
 
-        answered_correctly_uq_count[num] = answered_correctly_uq_dic[row[0]][row[2]]
-        answered_correctly_uq_dic[row[0]][row[2]] += 1
+        if answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])][0] != 0:
+            answered_correctly_uq_avg[num] = answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])][1]/answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])][0]
+        else:
+            answered_correctly_uq_avg[num] = np.nan
+
+        answered_correctly_uq_count[num] = answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])][0]
+
+        if update:
+            answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])][0] += 1
+
+    def user_part_feats_update(self,num,row,
+                                answered_correctly_up_count_sum_list_dic, # dic
+                                answered_correctly_up_count,answered_correctly_up_avg, # df
+                                update):
+        # countがlist[0],sumがlist[1]
+        if len(answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])]) == 0:
+            answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])] = [0,0]
+
+        if answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])][0] != 0:
+            answered_correctly_up_avg[num] = answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])][1]/answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])][0]
+        else:
+            answered_correctly_up_avg[num] = np.nan
+
+        answered_correctly_up_count[num] = answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])][0]
+
+        if update:
+            answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])][0] += 1
+
+
+    # def user_task_feats_update(self,num,row,
+    #                            answered_correctly_utask_count_sum_list_dic, # dic
+    #                            answered_correctly_utask_count,answered_correctly_utask_avg, # df
+    #                            update):
+    #     # countがlist[0],sumがlist[1]
+    #     if len(answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])]) == 0:
+    #         answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])] = [0,0]
+
+    #     if answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])][0] != 0:
+    #         answered_correctly_utask_avg[num] = answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])][1]/answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])][0]
+    #     else:
+    #         answered_correctly_utask_avg[num] = np.nan
+
+    #     answered_correctly_utask_count[num] = answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])][0]
+
+    #     if update:
+    #         answered_correctly_utask_count_sum_list_dic[int(row[0])][int(row[8])][0] += 1
+
+
+
 
     def tags1_feats_update(self,num,row,
                         answered_correctly_tags1_count_dic,answered_correctly_tags1_sum_dic,elapsed_time_tags1_sum_dic,explanation_tags1_sum_dic, # dic
-                        answered_correctly_tags1_avg,elapsed_time_tags1_avg,explanation_tags1_avg # df
-                        ):
+                        answered_correctly_tags1_avg,elapsed_time_tags1_avg,explanation_tags1_avg, # df
+                        update):
         if answered_correctly_tags1_count_dic[row[6]] != 0:
             answered_correctly_tags1_avg[num] = answered_correctly_tags1_sum_dic[row[6]] / answered_correctly_tags1_count_dic[row[6]]
             elapsed_time_tags1_avg[num] = elapsed_time_tags1_sum_dic[row[6]] / answered_correctly_tags1_count_dic[row[6]]
@@ -200,22 +272,34 @@ class LOOP(Feature):
             elapsed_time_tags1_avg[num] = np.nan
             explanation_tags1_avg[num] = np.nan
 
-        answered_correctly_tags1_count_dic[row[6]] += 1
-        elapsed_time_tags1_sum_dic[row[6]] += row[3]
-        explanation_tags1_sum_dic[row[6]] += int(row[4])
+        if update:
+            answered_correctly_tags1_count_dic[row[6]] += 1
+            elapsed_time_tags1_sum_dic[row[6]] += row[3]
+            explanation_tags1_sum_dic[row[6]] += int(row[4])
 
 
     def user_tags1_feats_update(self,num,row,
-                                answered_correctly_ut_dic, # dic
-                                answered_correctly_ut_count # df
-                                ):
+                                answered_correctly_ut_count_sum_list_dic, # dic
+                                answered_correctly_ut_count,answered_correctly_ut_avg, # df
+                                update):
 
-        answered_correctly_ut_count[num] = answered_correctly_ut_dic[row[0]][row[6]]
-        answered_correctly_ut_dic[row[0]][row[6]] += 1
+        if len(answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])]) == 0:
+            answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])] = [0,0]
+
+        if answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0] != 0:
+            answered_correctly_ut_avg[num] = answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][1]/answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0]
+        else:
+            answered_correctly_ut_avg[num] = np.nan
+
+        answered_correctly_ut_avg[num] = answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0]
+
+        if update:
+            answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0] += 1
 
 
     def ans_update(self,num,row,
                    answered_correctly_u_sum_dic,timestamp_u_incorrect_dic,answered_correctly_q_sum_dic,answered_correctly_tags1_sum_dic,
+                   answered_correctly_uq_count_sum_list_dic,answered_correctly_up_count_sum_list_dic,answered_correctly_ut_count_sum_list_dic,
                    update):
 
         # ------------------------------------------------------------------
@@ -238,9 +322,29 @@ class LOOP(Feature):
             # Tags1 features updates
             answered_correctly_tags1_sum_dic[row[6]] += row[1]
 
+            # ------------------------------------------------------------------
+            # User Question features updates
+            if len(answered_correctly_uq_count_sum_list_dic[row[0]][row[2]]) == 0:
+                answered_correctly_uq_count_sum_list_dic[row[0]][row[2]] = [0,0]
+            answered_correctly_uq_count_sum_list_dic[row[0]][row[2]][1] += int(row[1])
 
+            # ------------------------------------------------------------------
+            # User part features updates
+            if len(answered_correctly_up_count_sum_list_dic[row[0]][row[7]]) == 0:
+                answered_correctly_up_count_sum_list_dic[row[0]][row[7]] = [0,0]
+            answered_correctly_up_count_sum_list_dic[row[0]][row[7]][1] += int(row[1])
 
+            # ------------------------------------------------------------------
+            # User task features updates
+            # if len(answered_correctly_utask_count_sum_list_dic[row[0]][row[8]]) == 0:
+            #     answered_correctly_utask_count_sum_list_dic[row[0]][row[8]] = [0,0]
+            # answered_correctly_utask_count_sum_list_dic[row[0]][row[8]][1] += int(row[1])
 
+            # ------------------------------------------------------------------
+            # User tags1 features updates
+            if len(answered_correctly_ut_count_sum_list_dic[row[0]][row[6]]) == 0:
+                answered_correctly_ut_count_sum_list_dic[row[0]][row[6]] = [0,0]
+            answered_correctly_ut_count_sum_list_dic[row[0]][row[6]][1] += int(row[1])
 
     def add_past_feature(self,df, features_dicts,update = True):
 
@@ -252,16 +356,17 @@ class LOOP(Feature):
         answered_correctly_q_sum_dic = features_dicts['answered_correctly_q_sum']
         elapsed_time_q_sum_dic = features_dicts['elapsed_time_q_sum']
         explanation_q_sum_dic = features_dicts['explanation_q_sum']
-        answered_correctly_uq_dic = features_dicts['answered_correctly_uq']
+        answered_correctly_uq_count_sum_list_dic = features_dicts['answered_correctly_uq']
         timestamp_u = features_dicts['timestamp_u']
         timestamp_u_incorrect_dic = features_dicts['timestamp_u_incorrect']
-
         answered_correctly_tags1_count_dic = features_dicts['answered_correctly_tags1_count']
         answered_correctly_tags1_sum_dic = features_dicts['answered_correctly_tags1_sum']
         elapsed_time_tags1_sum_dic = features_dicts['answered_correctly_tags1_sum']
         explanation_tags1_sum_dic = features_dicts['explanation_tags1_sum_dic']
+        answered_correctly_up_count_sum_list_dic = features_dicts['answered_correctly_up_count_sum_list']
+        answered_correctly_ut_count_sum_list_dic = features_dicts['answered_correctly_ut_count_sum_list']
+        # answered_correctly_utask_count_sum_list_dic = features_dicts['answered_correctly_utask_count_sum_list']
 
-        answered_correctly_ut_dic = features_dicts['answered_correctly_ut']
 
 
         answered_correctly_u_avg = np.zeros(len(df), dtype = np.float32)
@@ -279,6 +384,7 @@ class LOOP(Feature):
         # -----------------------------------------------------------------------
         # User Question
         answered_correctly_uq_count = np.zeros(len(df), dtype = np.int32)
+        answered_correctly_uq_avg = np.zeros(len(df), dtype = np.float32)
         # -----------------------------------------------------------------------
         # Tags1 features
         answered_correctly_tags1_avg = np.zeros(len(df), dtype = np.float32)
@@ -287,66 +393,95 @@ class LOOP(Feature):
         # -----------------------------------------------------------------------
         # User Tags1
         answered_correctly_ut_count = np.zeros(len(df), dtype = np.int32)
+        answered_correctly_ut_avg = np.zeros(len(df), dtype = np.float32)
 
+        # -----------------------------------------------------------------------
+        # User Part
+        answered_correctly_up_count = np.zeros(len(df), dtype = np.int32)
+        answered_correctly_up_avg = np.zeros(len(df), dtype = np.float32)
+
+
+        # -----------------------------------------------------------------------
+        # User Task
+        # answered_correctly_utask_count = np.zeros(len(df), dtype = np.int32)
+        # answered_correctly_utask_avg = np.zeros(len(df), dtype = np.float32)
 
         for num, row in enumerate(tqdm(df[['user_id', 'answered_correctly', 'content_id',
-                                        'prior_question_elapsed_time', 'prior_question_had_explanation', 'timestamp','tags1']].values)):
+                                        'prior_question_elapsed_time', 'prior_question_had_explanation', 'timestamp','tags1','part']].values)):
 
             # User
             # ------------------------------------------------------------------
             self.user_feats_update(num,row,
                                    answered_correctly_u_count_dic,answered_correctly_u_sum_dic,elapsed_time_u_sum_dic,explanation_u_sum_dic, # dic
-                                   answered_correctly_u_avg,elapsed_time_u_avg,explanation_u_avg # df
-                                   )
+                                   answered_correctly_u_avg,elapsed_time_u_avg,explanation_u_avg, # df
+                                   update)
 
             # ------------------------------------------------------------------
             # Time
             self.update_time_stamp_user(num,row,
                                         timestamp_u,timestamp_u_incorrect_dic,timestamp_u_incorrect_recency_dic,
-                                        timestamp_u_recency_1,timestamp_u_recency_2,timestamp_u_recency_3
-                                        )
+                                        timestamp_u_recency_1,timestamp_u_recency_2,timestamp_u_recency_3,
+                                        update)
 
             # ------------------------------------------------------------------
             # Question
             self.questions_feats_update(num,row,
                                         answered_correctly_q_count_dic,answered_correctly_q_sum_dic,elapsed_time_q_sum_dic,explanation_q_sum_dic, # dic
-                                        answered_correctly_q_avg,elapsed_time_q_avg,explanation_q_avg # df
-                                        )
+                                        answered_correctly_q_avg,elapsed_time_q_avg,explanation_q_avg, # df
+                                        update)
 
             # ------------------------------------------------------------------
             # User Question
             self.user_questions_feats_update(num,row,
-                                            answered_correctly_uq_dic, # dic
-                                            answered_correctly_uq_count # df
-                                            )
+                                            answered_correctly_uq_count_sum_list_dic, # dic
+                                            answered_correctly_uq_count,answered_correctly_uq_avg, # df
+                                            update)
 
             # ------------------------------------------------------------------
             # Tags1
             self.tags1_feats_update(num,row,
                                     answered_correctly_tags1_count_dic,answered_correctly_tags1_sum_dic,elapsed_time_tags1_sum_dic,explanation_tags1_sum_dic, # dic
-                                    answered_correctly_tags1_avg,elapsed_time_tags1_avg,explanation_tags1_avg # df
-                                    )
+                                    answered_correctly_tags1_avg,elapsed_time_tags1_avg,explanation_tags1_avg, # df
+                                    update)
 
             # ------------------------------------------------------------------
-            # Tags1 Question
+            # User Tags1
+
             self.user_tags1_feats_update(num,row,
-                                        answered_correctly_ut_dic, # dic
-                                        answered_correctly_ut_count # df
-                                        )
+                                        answered_correctly_ut_count_sum_list_dic, # dic
+                                        answered_correctly_ut_count,answered_correctly_ut_avg, # df
+                                        update)
+
+            # ------------------------------------------------------------------
+            # User Part
+            self.user_part_feats_update(num,row,
+                                        answered_correctly_up_count_sum_list_dic, # dic
+                                        answered_correctly_up_count,answered_correctly_up_avg, # df
+                                        update)
+
+            # ------------------------------------------------------------------
+            # User Task container
+            # self.user_task_feats_update(num,row,
+            #                             answered_correctly_utask_count_sum_list_dic, # dic
+            #                             answered_correctly_utask_count,answered_correctly_utask_avg, # df
+            #                             update)
 
             # ------------------------------------------------------------------
             # 予測時にはupdateしない。
             self.ans_update(num,row,
                             answered_correctly_u_sum_dic,timestamp_u_incorrect_dic,answered_correctly_q_sum_dic,answered_correctly_tags1_sum_dic,
+                            answered_correctly_uq_count_sum_list_dic,answered_correctly_up_count_sum_list_dic,answered_correctly_ut_count_sum_list_dic,
                             update)
-
 
         user_df = pd.DataFrame({'answered_correctly_user_avg': answered_correctly_u_avg, 'elapsed_time_user_avg': elapsed_time_u_avg, 'explanation_user_avg': explanation_u_avg,
                                 'answered_correctly_q_avg': answered_correctly_q_avg, 'elapsed_time_q_avg': elapsed_time_q_avg, 'explanation_q_avg': explanation_q_avg,
                                 'answered_correctly_uq_count': answered_correctly_uq_count, 'timestamp_u_recency_1': timestamp_u_recency_1, 'timestamp_u_recency_2': timestamp_u_recency_2,
                                 'timestamp_u_recency_3': timestamp_u_recency_3, 'timestamp_u_incorrect_recency': timestamp_u_incorrect_recency_dic,
                                 'answered_correctly_tags1_avg' : answered_correctly_tags1_avg,'elapsed_time_tags1_avg': elapsed_time_tags1_avg,'explanation_tags1_avg':explanation_tags1_avg,
-                                'answered_correctly_ut_count' : answered_correctly_ut_count})
+                                'answered_correctly_uq_avg': answered_correctly_uq_avg,
+                                'answered_correctly_up_count' : answered_correctly_up_count,'answered_correctly_up_avg' : answered_correctly_up_avg,
+                                'answered_correctly_ut_count' : answered_correctly_ut_count,'answered_correctly_ut_avg' : answered_correctly_ut_avg})
+
 
         features_dicts = {
                             'answered_correctly_user_count': answered_correctly_u_count_dic,
@@ -357,14 +492,16 @@ class LOOP(Feature):
                             'answered_correctly_q_sum': answered_correctly_q_sum_dic,
                             'elapsed_time_q_sum': elapsed_time_q_sum_dic,
                             'explanation_q_sum': explanation_q_sum_dic,
-                            'answered_correctly_uq': answered_correctly_uq_dic,
+                            'answered_correctly_uq': answered_correctly_uq_count_sum_list_dic,
                             'timestamp_u': timestamp_u,
                             'timestamp_u_incorrect': timestamp_u_incorrect_dic,
                             'answered_correctly_tags1_count' : answered_correctly_tags1_count_dic,
                             'answered_correctly_tags1_sum' : answered_correctly_tags1_sum_dic,
                             'elapsed_time_tags1_sum' : elapsed_time_tags1_sum_dic,
                             'explanation_tags1_sum_dic' : explanation_tags1_sum_dic,
-                            'answered_correctly_ut' : answered_correctly_ut_dic
+                            'answered_correctly_ut_count_sum_list' : answered_correctly_ut_count_sum_list_dic,
+                            'answered_correctly_up_count_sum_list' : answered_correctly_up_count_sum_list_dic,
+                            # 'answered_correctly_utask_count_sum_list' : answered_correctly_utask_count_sum_list_dic
                         }
 
 
@@ -378,7 +515,9 @@ class LOOP(Feature):
                         'answered_correctly_uq_count','timestamp_u_recency_1','timestamp_u_recency_2',\
                         'timestamp_u_recency_3','timestamp_u_incorrect_recency',\
                         'answered_correctly_tags1_avg','elapsed_time_tags1_avg','explanation_tags1_avg',
-                        'answered_correctly_ut_count']
+                        'answered_correctly_ut_count','answered_correctly_uq_avg',\
+                        'answered_correctly_up_count','answered_correctly_up_avg',\
+                        'answered_correctly_ut_avg']
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
         self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
@@ -403,10 +542,17 @@ class LOOP(Feature):
         explanation_tags1_sum_dic = defaultdict(int)
 
         # User Question dictionary
-        answered_correctly_uq_dic = defaultdict(lambda: defaultdict(int))
+        answered_correctly_uq_count_sum_list_dic = defaultdict(lambda: defaultdict(list))
 
         # User Tags1 dictionary
-        answered_correctly_ut_dic = defaultdict(lambda: defaultdict(int))
+        answered_correctly_ut_count_sum_list_dic = defaultdict(lambda: defaultdict(int))
+
+        # User Part dictionary
+        answered_correctly_up_count_sum_list_dic = defaultdict(lambda: defaultdict(list))
+
+        # User task_container
+        # answered_correctly_utask_count_sum_list_dic = defaultdict(lambda: defaultdict(list))
+
 
         features_dicts = {
                             'answered_correctly_user_count': answered_correctly_u_count_dic,
@@ -417,14 +563,16 @@ class LOOP(Feature):
                             'answered_correctly_q_sum': answered_correctly_q_sum_dic,
                             'elapsed_time_q_sum': elapsed_time_q_sum_dic,
                             'explanation_q_sum': explanation_q_sum_dic,
-                            'answered_correctly_uq': answered_correctly_uq_dic,
+                            'answered_correctly_uq': answered_correctly_uq_count_sum_list_dic,
                             'timestamp_u': timestamp_u,
                             'timestamp_u_incorrect': timestamp_u_incorrect_dic,
                             'answered_correctly_tags1_count' : answered_correctly_tags1_count_dic,
                             'answered_correctly_tags1_sum' : answered_correctly_tags1_sum_dic,
                             'elapsed_time_tags1_sum' : elapsed_time_tags1_sum_dic,
                             'explanation_tags1_sum_dic' : explanation_tags1_sum_dic,
-                            'answered_correctly_ut' : answered_correctly_ut_dic
+                            'answered_correctly_ut_count_sum_list' : answered_correctly_ut_count_sum_list_dic,
+                            'answered_correctly_up_count_sum_list' : answered_correctly_up_count_sum_list_dic,
+                            # 'answered_correctly_utask_count_sum_list' : answered_correctly_utask_count_sum_list_dic
                         }
 
 
