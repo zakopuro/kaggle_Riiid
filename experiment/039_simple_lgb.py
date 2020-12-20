@@ -19,15 +19,14 @@ else:
 FEATURES_LIST = ['BASE','LOOP']
 
 BASE = ['part','prior_question_had_explanation','prior_question_elapsed_time']
-# GROUP_BY = ['task_container_count']
-LOOP = ['answered_correctly_user_avg','elapsed_time_user_avg','explanation_user_avg',\
-        'answered_correctly_q_avg','elapsed_time_q_avg','explanation_q_avg',\
-        'answered_correctly_uq_count','timestamp_u_recency_1','timestamp_u_recency_2',\
-        'timestamp_u_recency_3','timestamp_u_incorrect_recency',\
-        'answered_correctly_tags1_avg','elapsed_time_tags1_avg','explanation_tags1_avg',
-        'answered_correctly_ut_count','answered_correctly_uq_avg',\
-        'answered_correctly_up_count','answered_correctly_up_avg',\
-        'answered_correctly_ut_avg']
+LOOP = ['ans_user_avg','elapsed_time_user_avg','explanation_user_avg',
+        'ans_content_avg','elapsed_time_content_avg','explanation_content_avg',
+        'ans_user_content_avg',
+        'lag_time_1','lag_time_2','lag_time_3','lag_incorrect_time',
+        'ans_tags1_avg','elapsed_time_tags1_avg','explanation_tags1_avg',
+        'ans_user_tags1_count','ans_user_content_avg',
+        'ans_user_part_count','ans_user_part_avg',
+        'ans_user_tags1_avg']
 
 
 USE_COLS = BASE + LOOP
@@ -96,7 +95,7 @@ def main():
     # train = data_util.reduce_mem_usage(train)
     # valid = data_util.reduce_mem_usage(valid)
 
-    LOG.info(f'train_size:{train.shape} valid_size:{valid.shape}')
+    LOG.info(f'train_size:{train[USE_COLS].shape} valid_size:{valid[USE_COLS].shape}')
 
     model,fi,valid['pred'] = run_lgb(train=train,valid=valid,LOG=LOG)
     data_util.seve_model(model,fi,file_name)

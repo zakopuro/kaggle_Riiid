@@ -127,7 +127,7 @@ class GROUP_BY(Feature):
 
 
 
-class LOOP(Feature):
+class LOOP2(Feature):
 
     def user_feats_update(self,num,row,
                          answered_correctly_u_count_dic,answered_correctly_u_sum_dic,elapsed_time_u_sum_dic,explanation_u_sum_dic, # dic
@@ -283,18 +283,24 @@ class LOOP(Feature):
                                 answered_correctly_ut_count,answered_correctly_ut_avg, # df
                                 update):
 
-        if len(answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])]) == 0:
-            answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])] = [0,0]
+        try:
+            tags1 = int(row[6])
+        except:
+            tags1 = str(row[6])
 
-        if answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0] != 0:
-            answered_correctly_ut_avg[num] = answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][1]/answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0]
+        if len(answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1]) == 0:
+            answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1] = [0,0]
+
+
+        if answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1][0] != 0:
+            answered_correctly_ut_avg[num] = answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1][1]/answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1][0]
         else:
             answered_correctly_ut_avg[num] = np.nan
 
-        answered_correctly_ut_avg[num] = answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0]
+        answered_correctly_ut_avg[num] = answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1][0]
 
         if update:
-            answered_correctly_ut_count_sum_list_dic[int(row[0])][int(row[6])][0] += 1
+            answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1][0] += 1
 
 
     def ans_update(self,num,row,
@@ -324,15 +330,15 @@ class LOOP(Feature):
 
             # ------------------------------------------------------------------
             # User Question features updates
-            if len(answered_correctly_uq_count_sum_list_dic[row[0]][row[2]]) == 0:
-                answered_correctly_uq_count_sum_list_dic[row[0]][row[2]] = [0,0]
-            answered_correctly_uq_count_sum_list_dic[row[0]][row[2]][1] += int(row[1])
+            if len(answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])]) == 0:
+                answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])] = [0,0]
+            answered_correctly_uq_count_sum_list_dic[int(row[0])][int(row[2])][1] += int(row[1])
 
             # ------------------------------------------------------------------
             # User part features updates
-            if len(answered_correctly_up_count_sum_list_dic[row[0]][row[7]]) == 0:
-                answered_correctly_up_count_sum_list_dic[row[0]][row[7]] = [0,0]
-            answered_correctly_up_count_sum_list_dic[row[0]][row[7]][1] += int(row[1])
+            if len(answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])]) == 0:
+                answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])] = [0,0]
+            answered_correctly_up_count_sum_list_dic[int(row[0])][int(row[7])][1] += int(row[1])
 
             # ------------------------------------------------------------------
             # User task features updates
@@ -342,9 +348,14 @@ class LOOP(Feature):
 
             # ------------------------------------------------------------------
             # User tags1 features updates
-            if len(answered_correctly_ut_count_sum_list_dic[row[0]][row[6]]) == 0:
-                answered_correctly_ut_count_sum_list_dic[row[0]][row[6]] = [0,0]
-            answered_correctly_ut_count_sum_list_dic[row[0]][row[6]][1] += int(row[1])
+            try:
+                tags1 = int(row[6])
+            except:
+                tags1 = str(row[6])
+
+            if len(answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1]) == 0:
+                answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1] = [0,0]
+            answered_correctly_ut_count_sum_list_dic[int(row[0])][tags1][1] += int(row[1])
 
     def add_past_feature(self,df, features_dicts,update = True):
 
@@ -545,7 +556,7 @@ class LOOP(Feature):
         answered_correctly_uq_count_sum_list_dic = defaultdict(lambda: defaultdict(list))
 
         # User Tags1 dictionary
-        answered_correctly_ut_count_sum_list_dic = defaultdict(lambda: defaultdict(int))
+        answered_correctly_ut_count_sum_list_dic = defaultdict(lambda: defaultdict(list))
 
         # User Part dictionary
         answered_correctly_up_count_sum_list_dic = defaultdict(lambda: defaultdict(list))
@@ -583,7 +594,7 @@ class LOOP(Feature):
         self.valid = self.valid[create_feats]
 
 
-        with open(f'./features/kernel_data/loop_feats_mini.dill','wb') as f:
+        with open(f'./features/kernel_mini_data/loop_feats_mini2.dill','wb') as f:
             dill.dump(features_dicts,f)
 
 
@@ -604,6 +615,23 @@ class LOOP(Feature):
 
 #         self.train = self.train[create_feats]
 #         self.valid = self.valid[create_feats]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
