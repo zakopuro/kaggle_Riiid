@@ -12,6 +12,8 @@ import sys
 sys.path.append('./')
 from utils import data_util,logger
 import time
+from sklearn.decomposition import PCA
+
 
 MINI_DATA = True
 if MINI_DATA == True:
@@ -107,7 +109,7 @@ class BASE(Feature):
 class GROUP_BY(Feature):
 
     def create_features(self):
-        create_feats = ['task_container_count']
+        create_feats = ['task_container_count','paid_user_part_mean']
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
         self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
 
@@ -122,12 +124,114 @@ class GROUP_BY(Feature):
         self.train = pd.merge(self.train,train_task_container_count,on=['user_id','task_container_id'],how='left')
         self.valid = pd.merge(self.valid,train_task_container_count,on=['user_id','task_container_id'],how='left')
 
+
+        train_paid_df = pd.read_feather(f'./{Feature.dir}/PAID_USER_train.feather')
+        valid_paid_df = pd.read_feather(f'./{Feature.dir}/PAID_USER_valid.feather')
+
+        self.train = pd.concat([self.train,train_paid_df],axis=1)
+        self.valid = pd.concat([self.valid,valid_paid_df],axis=1)
+
+        paid_user_part_mean = self.train[[TARGET,'paid_user','part']].groupby(['paid_user','part']).agg(['mean']).reset_index()
+        paid_user_part_mean.columns = ['paid_user','part','paid_user_part_mean']
+        self.train = pd.merge(self.train,paid_user_part_mean,on=['part','paid_user'],how='left')
+        self.valid = pd.merge(self.valid,paid_user_part_mean,on=['part','paid_user'],how='left')
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
+
+
+class PAID_USER(Feature):
+
+    # 有料会員を特定する
+    def create_features(self):
+        create_feats = ['paid_user']
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
+
+        self.train['days_elapsed'] = self.train['timestamp']/(1000*3600*24)
+        self.valid['days_elapsed'] = self.valid['timestamp']/(1000*3600*24)
+        self.train['days_elapsed'] = self.train['days_elapsed'].astype(int)
+        self.valid['days_elapsed'] = self.valid['days_elapsed'].astype(int)
+
+
+        df = pd.concat([self.train,self.valid]).reset_index(drop=True)
+
+        df['count'] = 1
+        user_day_count = df[df['days_elapsed'] >= 1].groupby(['user_id','days_elapsed'])['count'].agg(['count'])
+        user_day_count = user_day_count.reset_index()
+        # 1日50問以上解いているユーザーを有料会員にする
+        paid_user = user_day_count[user_day_count['count'] > 50]['user_id'].unique()
+
+        df['paid_user'] = 0
+        df.loc[df['user_id'].isin(paid_user),'paid_user'] = 1
+        self.train = df[:len(self.train)]
+        self.valid = df[len(self.train):]
+        self.train = self.train.reset_index(drop=True)
+        self.valid = self.valid.reset_index(drop=True)
+
         self.train = self.train[create_feats]
         self.valid = self.valid[create_feats]
 
 
 
+class TAGS(Feature):
+
+    def create_features(self):
+        create_feats = ["tags_pca_0", "tags_pca_1"]
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_valid.feather')
+
+        qs = pd.read_csv('./data/input/questions.csv')
+        lst = []
+        for tags in qs["tags"]:
+            ohe = np.zeros(188)
+            if str(tags) != "nan":
+                for tag in tags.split():
+                    ohe += np.eye(188)[int(tag)]
+            lst.append(ohe)
+        tags_df = pd.DataFrame(lst, columns=[f"tag_{i}" for i in range(188)]).astype(int)
+
+        pca = PCA(n_components=2)
+        X_2d = pca.fit_transform(tags_df.values)
+
+        pca_feat_df = pd.DataFrame(X_2d, columns=["tags_pca_0", "tags_pca_1"])
+        pca_feat_df["content_id"] = qs["question_id"]
+
+        self.train = pd.merge(self.train,pca_feat_df,on='content_id',how='left')
+        self.valid = pd.merge(self.valid,pca_feat_df,on='content_id',how='left')
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
+
+        pca_feat_df.to_feather(f'./{Feature.dir}/pca_tags.feather')
+
+
+
+
+
+
+
+
 class LOOP(Feature):
+
+
+    def update_part_lag_time_feats(self,user_id,part,timestamp,
+                                  features_dicts):
+        if len(features_dicts['lag_user_part_time'][user_id][part]) == 3:
+            features_dicts['lag_user_part_time'][user_id][part].pop(0)
+            features_dicts['lag_user_part_time'][user_id][part].append(timestamp)
+        else:
+            features_dicts['lag_user_part_time'][user_id][part].append(timestamp)
+
+    def update_part_lag_incorrect_feats(self,user_id,part,timestamp,target,
+                                        features_dicts):
+
+        if target == 0:
+            if len(features_dicts['lag_user_part_incorrect_time'][user_id][part]) == 1:
+                features_dicts['lag_user_part_incorrect_time'][user_id][part].pop(0)
+                features_dicts['lag_user_part_incorrect_time'][user_id][part].append(timestamp)
+            else:
+                features_dicts['lag_user_part_incorrect_time'][user_id][part].append(timestamp)
 
     #
     def update_lag_time_feats(self,user_id,timestamp,
@@ -240,6 +344,34 @@ class LOOP(Feature):
             feats_np_dic['lag_incorrect_time'][num] = timestamp - features_dicts['lag_user_incorrect_time'][user_id][0]
 
 
+    # User part lag time
+    def create_part_lag_time_feats(self,num,user_id,part,timestamp,
+                                   features_dicts,
+                                   feats_np_dic):
+
+        if len(features_dicts['lag_user_part_time'][user_id][part]) == 0:
+            feats_np_dic['lag_part_time_1'][num] = np.nan
+            feats_np_dic['lag_part_time_2'][num] = np.nan
+            feats_np_dic['lag_part_time_3'][num] = np.nan
+        elif len(features_dicts['lag_user_part_time'][user_id][part]) == 1:
+            feats_np_dic['lag_part_time_1'][num] = timestamp - features_dicts['lag_user_part_time'][user_id][part][0]
+            feats_np_dic['lag_part_time_2'][num] = np.nan
+            feats_np_dic['lag_part_time_3'][num] = np.nan
+        elif len(features_dicts['lag_user_part_time'][user_id][part]) == 2:
+            feats_np_dic['lag_part_time_1'][num] = timestamp - features_dicts['lag_user_part_time'][user_id][part][1]
+            feats_np_dic['lag_part_time_2'][num] = timestamp - features_dicts['lag_user_part_time'][user_id][part][0]
+            feats_np_dic['lag_part_time_3'][num] = np.nan
+        elif len(features_dicts['lag_user_part_time'][user_id][part]) == 3:
+            feats_np_dic['lag_part_time_1'][num] = timestamp - features_dicts['lag_user_part_time'][user_id][part][2]
+            feats_np_dic['lag_part_time_2'][num] = timestamp - features_dicts['lag_user_part_time'][user_id][part][1]
+            feats_np_dic['lag_part_time_3'][num] = timestamp - features_dicts['lag_user_part_time'][user_id][part][0]
+
+        if len(features_dicts['lag_user_part_incorrect_time'][user_id][part]) == 0:
+            feats_np_dic['lag_part_incorrect_time'][num] = np.nan
+        else:
+            feats_np_dic['lag_part_incorrect_time'][num] = timestamp - features_dicts['lag_user_part_incorrect_time'][user_id][part][0]
+
+
 
 
     # dataframeに格納するnpを一括作成
@@ -267,7 +399,12 @@ class LOOP(Feature):
                     # User Tags1
                     'ans_user_tags1_avg',
                     # User Part
-                    'ans_user_part_avg'
+                    'ans_user_part_avg',
+                    # User Part lag time
+                    'lag_part_time_1',
+                    'lag_part_time_2',
+                    'lag_part_time_3',
+                    'lag_part_incorrect_time',
         ]
 
         df_name_int_list = [
@@ -323,6 +460,19 @@ class LOOP(Feature):
             if update:
                 self.update_lag_incorrect_feats(user_id,timestamp,target,
                                                 features_dicts)
+
+
+            # Part lag time
+            # ------------------------------------------------------------------
+            self.create_part_lag_time_feats(num,user_id,part,timestamp,
+                                            features_dicts,
+                                            feats_np_dic)
+            # 更新
+            self.update_part_lag_time_feats(user_id,part,timestamp,
+                                            features_dicts)
+            if update:
+                self.update_part_lag_incorrect_feats(user_id,part,timestamp,target,
+                                                    features_dicts)
 
             # args feats
             # ------------------------------------------------------------------
@@ -422,6 +572,9 @@ class LOOP(Feature):
         # User Tags1
         ans_user_tags1_list_dic = defaultdict(lambda: defaultdict(list))
 
+        # User Part Time
+        lag_user_part_time_dic = defaultdict(lambda: defaultdict(list))
+        lag_user_part_incorrect_time_dic = defaultdict(lambda: defaultdict(list))
 
         features_dicts = {
                         # User
@@ -447,7 +600,10 @@ class LOOP(Feature):
                         # User Part
                         'ans_user_part_list' : ans_user_part_list_dic,
                         # User Tags1
-                        'ans_user_tags1_list' : ans_user_tags1_list_dic
+                        'ans_user_tags1_list' : ans_user_tags1_list_dic,
+                        # User Part Time
+                        'lag_user_part_time' : lag_user_part_time_dic,
+                        'lag_user_part_incorrect_time' : lag_user_part_incorrect_time_dic
         }
 
         return features_dicts
