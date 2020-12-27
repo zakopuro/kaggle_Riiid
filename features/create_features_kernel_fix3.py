@@ -152,7 +152,7 @@ class GROUP_BY(Feature):
 
 
 
-class LOOP_FIX(Feature):
+class LOOP_FIX2(Feature):
 
     # User 組み合わせ特徴量更新
     def update_user_arg_feats(self,user_id,col,target,
@@ -333,7 +333,6 @@ class LOOP_FIX(Feature):
         bundle_id = int(previous_row[6])
         part = int(previous_row[7])
         community = int(previous_row[8])
-        part_community = int(previous_row[9])
 
         # User
         features_dicts['ans_user_sum'][user_id] += target
@@ -349,10 +348,7 @@ class LOOP_FIX(Feature):
                         'user_part_count','ans_user_part_avg'],                                 # np
                         [community,
                         'user_community_list',                                                       # dic
-                        'user_community_count','ans_user_community_avg'],
-                        [part_community,
-                        'user_part_community_list',                                                       # dic
-                        'user_part_community_count','ans_user_part_community_avg']
+                        'user_community_count','ans_user_community_avg']
                         ]
         for create_list in create_lists:
             self.update_user_arg_feats(user_id,create_list[0],target,
@@ -400,9 +396,7 @@ class LOOP_FIX(Feature):
                     # User Part
                     'ans_user_part_avg',
                     # User Community
-                    'ans_user_community_avg',
-                    # User Part_Community
-                    'ans_user_part_community_avg'
+                    'ans_user_community_avg'
         ]
 
         df_name_int_list = [
@@ -413,9 +407,7 @@ class LOOP_FIX(Feature):
                     # User Part
                     'user_part_count',
                     # User Community
-                    'user_community_count',
-                    # User Part_Community
-                    'user_part_community_count'
+                    'user_community_count'
         ]
 
         feats_np_dic = {}
@@ -438,7 +430,7 @@ class LOOP_FIX(Feature):
 
 
         for num, row in enumerate(tqdm(df[['user_id', 'answered_correctly', 'content_id', 'prior_question_elapsed_time',
-                                            'prior_question_had_explanation', 'timestamp','bundle_id','part','community','part_community']].values)):
+                                            'prior_question_had_explanation', 'timestamp','bundle_id','part','community']].values)):
             # メモリ削減のため型変換
             user_id = int(row[0])
             target = int(row[1])
@@ -449,7 +441,6 @@ class LOOP_FIX(Feature):
             bundle_id = int(row[6])
             part = int(row[7])
             community = int(row[8])
-            part_community = int(row[9])
 
             update = _update
             # 前回とbundle_idが同じ時は更新しない
@@ -518,10 +509,7 @@ class LOOP_FIX(Feature):
                             'user_part_count','ans_user_part_avg'],                                 # np
                             [community,
                             'user_community_list',                                                       # dic
-                            'user_community_count','ans_user_community_avg'],
-                            [part_community,
-                            'user_part_community_list',                                                       # dic
-                            'user_part_community_count','ans_user_part_community_avg']
+                            'user_community_count','ans_user_community_avg']
                             ]
             for create_list in create_lists:
                 self.create_user_args_feats(num,user_id,create_list[0],
@@ -611,8 +599,6 @@ class LOOP_FIX(Feature):
                     'user_part_list',
                     # User Community
                     'user_community_list',
-                    # User Part_Community
-                    'user_part_community_list',
         ]
 
 
@@ -646,7 +632,7 @@ class LOOP_FIX(Feature):
         self.valid = self.valid[create_feats]
 
 
-        with open(f'./features/kernel_base/loop_feats_mini.dill','wb') as f:
+        with open(f'./features/kernel_base/loop_feats_mini3.dill','wb') as f:
             dill.dump(features_dicts,f)
 
 
