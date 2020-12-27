@@ -445,6 +445,60 @@ class LOOP(Feature):
                                         features_dicts,
                                         create_list[1])
 
+    # 特徴量アップデート
+    def update_feats(self,previous_row,features_dicts):
+        user_id = int(previous_row[0])
+        target = int(previous_row[1])
+        content_id = int(previous_row[2])
+        # prior_question_elapsed_time = previous_row[3]
+        # prior_question_had_explanation = int(previous_row[4])
+        timestamp = int(previous_row[5])
+        # Nanのときはそのまま(float)にする
+        try:
+            tags1 = int(previous_row[6])
+        except:
+            tags1 = previous_row[6]
+
+        part = int(previous_row[7])
+        bundle_id = int(previous_row[8])
+
+        self.update_lag_incorrect_feats(user_id,timestamp,target,
+                                        features_dicts)
+
+        self.update_part_lag_incorrect_feats(user_id,part,timestamp,target,
+                                                    features_dicts)
+
+
+        create_lists = [[user_id,
+                        'ans_user_count','ans_user_sum','elapsed_time_user_sum','explanation_user_sum',                 # dic
+                        'ans_user_avg','elapsed_time_user_avg','explanation_user_avg'],                                 # np
+                        [content_id,
+                        'ans_content_count','ans_content_sum','elapsed_time_content_sum','explanation_content_sum',     # dic
+                        'ans_content_avg','elapsed_time_content_avg','explanation_content_avg'],                        # np
+                        [tags1,
+                        'ans_tags1_count','ans_tags1_sum','elapsed_time_tags1_sum','explanation_tags1_sum',             # dic
+                        'ans_tags1_avg','elapsed_time_tags1_avg','explanation_tags1_avg']                               # np
+                        ]
+
+        for create_list in create_lists:
+            self.update_arg_feats(create_list[0],target,
+                    features_dicts,
+                    create_list[1],create_list[2])
+
+        create_lists = [[part,
+                        'ans_user_part_list',                                                       # dic
+                        'ans_user_part_count','ans_user_part_avg'],                                 # np
+                        ]
+
+        for create_list in create_lists:
+            self.update_user_arg_feats(user_id,create_list[0],target,
+                                                        features_dicts,
+                                                        create_list[1])
+
+
+
+
+
 
 
     # dataframeに格納するnpを一括作成
@@ -500,6 +554,8 @@ class LOOP(Feature):
 
         previous_bundle_id = None
         previous_user_id = None
+        previous_row = None
+        update_cnt = 0
         previous_df = []
 
         for num, row in enumerate(tqdm(df[['user_id', 'answered_correctly', 'content_id',
@@ -526,16 +582,26 @@ class LOOP(Feature):
             # 前回とbundle_idが同じ時は更新しない
             if (previous_bundle_id == bundle_id) & (previous_user_id == user_id) & (_update):
                 update = False
+                if update_cnt == 0:
+                    previous_df.append(previous_row)
                 previous_df.append(row)
+                update_cnt += 1
 
-            # # 溜まっていたら過去情報をupdate
-            # if (update) & (len(previous_df) > 0):
-            #     # self.update_previous(row,features_dicts,previous_df)
-            #     for row in previous_df:
-            #         row
+            # 溜まっていたら過去情報をupdate
+            if (update) & (len(previous_df) > 0):
+                self.update_previous(row,features_dicts,previous_df)
+                previous_df = []
+                update_cnt = 0
+
+
+            if (update) & (previous_row is not None):
+                self.update_feats(previous_row,features_dicts)
+
+
 
             previous_bundle_id = bundle_id
             previous_user_id = user_id
+            previous_row = row
 
             # lag time
             # ------------------------------------------------------------------
@@ -545,9 +611,9 @@ class LOOP(Feature):
             # 更新
             self.update_lag_time_feats(user_id,timestamp,
                                     features_dicts)
-            if update:
-                self.update_lag_incorrect_feats(user_id,timestamp,target,
-                                                features_dicts)
+            # if update:
+            #     self.update_lag_incorrect_feats(user_id,timestamp,target,
+            #                                     features_dicts)
 
 
             # Part lag time
@@ -558,9 +624,9 @@ class LOOP(Feature):
             # 更新
             self.update_part_lag_time_feats(user_id,part,timestamp,
                                             features_dicts)
-            if update:
-                self.update_part_lag_incorrect_feats(user_id,part,timestamp,target,
-                                                    features_dicts)
+            # if update:
+            #     self.update_part_lag_incorrect_feats(user_id,part,timestamp,target,
+            #                                         features_dicts)
 
             # args feats
             # ------------------------------------------------------------------
@@ -575,6 +641,7 @@ class LOOP(Feature):
                             'ans_tags1_avg','elapsed_time_tags1_avg','explanation_tags1_avg']                               # np
                             ]
 
+
             for create_list in create_lists:
                 self.create_arg_feats(num,create_list[0],
                                     features_dicts,feats_np_dic,
@@ -587,10 +654,10 @@ class LOOP(Feature):
                                             create_list[3],create_list[4])
 
                 # update時のみ
-                if update:
-                    self.update_arg_feats(create_list[0],target,
-                                        features_dicts,
-                                        create_list[1],create_list[2])
+                # if update:
+                    # self.update_arg_feats(create_list[0],target,
+                    #                     features_dicts,
+                    #                     create_list[1],create_list[2])
 
             # User args feats
             # ------------------------------------------------------------------
@@ -599,6 +666,7 @@ class LOOP(Feature):
                             'ans_user_part_count','ans_user_part_avg'],                                 # np
                             ]
 
+
             for create_list in create_lists:
                 self.create_user_args_feats(num,user_id,create_list[0],
                                             features_dicts,feats_np_dic,
@@ -606,10 +674,10 @@ class LOOP(Feature):
                                             create_list[2],create_list[3]
                                             )
 
-                if update:
-                    self.update_user_arg_feats(user_id,create_list[0],target,
-                                               features_dicts,
-                                               create_list[1])
+                # if update:
+                #     self.update_user_arg_feats(user_id,create_list[0],target,
+                #                                features_dicts,
+                #                                create_list[1])
 
             # User args count
             # ------------------------------------------------------------------
