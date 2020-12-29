@@ -137,5 +137,5 @@ features/mini_data/*
 features/kernel_base/*
 features/fe/*
 models/*
-all_data/*
+features/all_data/*
 .vscode
