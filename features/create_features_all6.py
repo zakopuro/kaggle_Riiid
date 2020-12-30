@@ -193,7 +193,7 @@ class GROUP_BY(Feature):
 
 
 
-class LOOP_FIX3(Feature):
+class LOOP_FIX_TIME2(Feature):
 
     # User 組み合わせ特徴量更新
     def update_user_arg_feats(self,user_id,col,target,
@@ -229,11 +229,11 @@ class LOOP_FIX3(Feature):
                             features_dicts,
                             feats_np_dic):
 
-        if len(features_dicts['user_list'][user_id]) < 5:
+        if len(features_dicts['user_list'][user_id]) == 0:
+            features_dicts['user_list'][user_id] = [0 for _ in range(4)]
             features_dicts['user_list'][user_id].append(bundle_id)
 
         feats_np_dic['first_bundle'][num] = features_dicts['user_list'][user_id][4]
-
 
     def update_lag_incorrect_feats(self,user_id,timestamp,target,
                                    features_dicts):
@@ -266,8 +266,8 @@ class LOOP_FIX3(Feature):
         3 : explanation_sum
         '''
 
-        if len(features_dicts[feat_list_name][col]) == 0:
-            features_dicts[feat_list_name][col] = [0 for _ in range(4)]
+        # if len(features_dicts[feat_list_name][col]) == 0:
+        #     features_dicts[feat_list_name][col] = [0 for _ in range(4)]
         features_dicts[feat_list_name][col][2] += prior_question_elapsed_time
         features_dicts[feat_list_name][col][3] += prior_question_had_explanation
 
@@ -431,7 +431,7 @@ class LOOP_FIX3(Feature):
 
 
 
-    def update_feats(self,previous_row,features_dicts):
+    def update_feats(self,previous_row,features_dicts,time_update):
         # メモリ削減のため型変換
         user_id = int(previous_row[0])
         target = int(previous_row[1])
@@ -469,6 +469,23 @@ class LOOP_FIX3(Feature):
                                   features_dicts,
                                   n=4)
 
+
+        if time_update:
+            self.update_lag_time_feats(user_id,timestamp,
+                                    features_dicts)
+
+            self.update_part_lag_time_feats(user_id,part,timestamp,
+                                            features_dicts)
+            create_lists = [[user_id,
+                            'user_list'],
+                            [content_id,
+                            'content_list']]
+            for create_list in create_lists:
+                self.update_args_time_feats(create_list[0],prior_question_elapsed_time,prior_question_had_explanation,
+                                features_dicts,
+                                create_list[1])
+
+
         # # rolling mean
         # self.update_user_ans_list(user_id,target,
         #                           features_dicts)
@@ -477,8 +494,12 @@ class LOOP_FIX3(Feature):
 
     # 過去分アップデート
     def update_previous(self,features_dicts,previous_df):
-        for previous_row in previous_df:
-            self.update_feats(previous_row,features_dicts)
+        for n,previous_row in enumerate(previous_df):
+            # 最後だけupdate
+            if (n+1) == len(previous_df):
+                self.update_feats(previous_row,features_dicts,time_update=True)
+            else:
+                self.update_feats(previous_row,features_dicts,time_update=False)
 
 
     # dataframeに格納するnpを一括作成
@@ -561,9 +582,10 @@ class LOOP_FIX3(Feature):
                 self.update_previous(features_dicts,previous_df)
                 previous_df = []
                 update_cnt = 0
+                update = False
 
             if (update) & (previous_row is not None):
-                self.update_feats(previous_row,features_dicts)
+                self.update_feats(previous_row,features_dicts,time_update=True)
 
             previous_bundle_id = bundle_id
             previous_user_id = user_id
@@ -586,10 +608,10 @@ class LOOP_FIX3(Feature):
                                     create_list[1],
                                     create_list[2],create_list[3],create_list[4],create_list[5])
 
-                # 常に更新
-                self.update_args_time_feats(create_list[0],prior_question_elapsed_time,prior_question_had_explanation,
-                                            features_dicts,
-                                            create_list[1])
+                # # 常に更新
+                # self.update_args_time_feats(create_list[0],prior_question_elapsed_time,prior_question_had_explanation,
+                #                             features_dicts,
+                #                             create_list[1])
 
             # First bundle
             self.create_first_bundle(num,user_id,bundle_id,
@@ -649,11 +671,11 @@ class LOOP_FIX3(Feature):
             # ------------------------------------------------------------------
             # lag time
             # ------------------------------------------------------------------
-            self.update_lag_time_feats(user_id,timestamp,
-                                    features_dicts)
+            # self.update_lag_time_feats(user_id,timestamp,
+            #                         features_dicts)
 
-            self.update_part_lag_time_feats(user_id,part,timestamp,
-                                            features_dicts)
+            # self.update_part_lag_time_feats(user_id,part,timestamp,
+            #                                 features_dicts)
 
             # count
             # ------------------------------------------------------------------
@@ -724,7 +746,7 @@ class LOOP_FIX3(Feature):
         self.valid = self.valid[create_feats]
 
 
-        with open(f'./features/all_data/loop_feats3.dill','wb') as f:
+        with open(f'./features/all_data/loop_feats6.dill','wb') as f:
             dill.dump(features_dicts,f)
 
 
@@ -760,9 +782,166 @@ class BUNDLE_ID(Feature):
         self.train = self.train[create_feats]
         self.valid = self.valid[create_feats]
 
+class ROLLING_MEAN2(Feature):
+
+    # rolling mean
+    def create_user_ans_rolling_mean(self,num,user_id,timestamp,
+                                    features_dicts,
+                                    feats_np_dic,
+                                    n):
+
+        if len(features_dicts[f'user_past_ans_{n}'][user_id]) == n:
+            feats_np_dic[f'rolling_mean_{n}'][num] = features_dicts[f'user_past_ans_{n}'][user_id].count('1')/n
+        else:
+            feats_np_dic[f'rolling_mean_{n}'][num] = np.nan
 
 
-class ROLLING_PART_MEAN(Feature):
+    def update_user_ans_list(self,user_id,target,
+                                  features_dicts,
+                                  n):
+        if len(features_dicts[f'user_past_ans_{n}'][user_id]) == n:
+            features_dicts[f'user_past_ans_{n}'][user_id] = features_dicts[f'user_past_ans_{n}'][user_id][1:]
+            features_dicts[f'user_past_ans_{n}'][user_id] += str(target)
+        else:
+            features_dicts[f'user_past_ans_{n}'][user_id] += str(target)
+
+
+    def update_feats(self,previous_row,features_dicts):
+        # メモリ削減のため型変換
+        user_id = int(previous_row[0])
+        target = int(previous_row[1])
+        content_id = int(previous_row[2])
+        prior_question_elapsed_time = previous_row[3]
+        prior_question_had_explanation = int(previous_row[4])
+        timestamp = int(previous_row[5])
+        bundle_id = int(previous_row[6])
+        part = int(previous_row[7])
+        community = int(previous_row[8])
+
+        # rolling mean
+        self.update_user_ans_list(user_id,target,
+                                  features_dicts,
+                                  n=10)
+
+        self.update_user_ans_list(user_id,target,
+                                  features_dicts,
+                                  n=3)
+
+    # 過去分アップデート
+    def update_previous(self,features_dicts,previous_df):
+        for previous_row in previous_df:
+            self.update_feats(previous_row,features_dicts)
+
+
+
+    # dataframeに格納するnpを一括作成
+    def create_datas(self,df):
+        df_name_float_list = [
+                    # User
+                    'rolling_mean_10',
+                    'rolling_mean_3'
+        ]
+
+        feats_np_dic = {}
+        for name in df_name_float_list:
+            feats_np_dic[name] = np.zeros(len(df), dtype = np.float32)
+
+        return feats_np_dic
+
+    def add_past_feature(self,df, features_dicts,_update = True):
+        # 特徴量格納dicを作成
+        feats_np_dic = self.create_datas(df)
+        previous_bundle_id = None
+        previous_user_id = None
+        previous_row = None
+        update_cnt = 0
+        previous_df = []
+
+
+        for num, row in enumerate(tqdm(df[['user_id', 'answered_correctly', 'content_id', 'prior_question_elapsed_time',
+                                            'prior_question_had_explanation', 'timestamp','bundle_id','part','community']].values)):
+            # メモリ削減のため型変換
+            user_id = int(row[0])
+            target = int(row[1])
+            content_id = int(row[2])
+            prior_question_elapsed_time = row[3]
+            prior_question_had_explanation = int(row[4])
+            timestamp = int(row[5])
+            bundle_id = int(row[6])
+            part = int(row[7])
+            community = int(row[8])
+
+            update = _update
+            # 前回とbundle_idが同じ時は更新しない
+            if (previous_bundle_id == bundle_id) & (previous_user_id == user_id) & (_update):
+                update = False
+                if update_cnt == 0:
+                    previous_df.append(previous_row)
+                previous_df.append(row)
+                update_cnt += 1
+
+            # 溜まっていたら過去情報をupdate
+            if (update) & (len(previous_df) > 0):
+                self.update_previous(features_dicts,previous_df)
+                previous_df = []
+                update_cnt = 0
+                update = False
+
+            if (update) & (previous_row is not None):
+                self.update_feats(previous_row,features_dicts)
+
+            previous_bundle_id = bundle_id
+            previous_user_id = user_id
+            previous_row = row
+
+            self.create_user_ans_rolling_mean(num,user_id,target,
+                                              features_dicts,
+                                              feats_np_dic,
+                                              n=10)
+
+            self.create_user_ans_rolling_mean(num,user_id,target,
+                                              features_dicts,
+                                              feats_np_dic,
+                                              n=3)
+
+
+        loop_feats_df = pd.DataFrame(feats_np_dic)
+        df = pd.concat([df, loop_feats_df], axis = 1)
+        return df,feats_np_dic.keys()
+
+    def create_dics(self):
+        features_dicts = {}
+        str_name = [
+                    # User rolling
+                    'user_past_ans_10',
+                    'user_past_ans_3'
+        ]
+
+        for name in str_name:
+            features_dicts[name] = defaultdict(str)
+
+        return features_dicts
+
+    def create_features(self):
+
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_FIX_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_FIX_valid.feather')
+        self.train['prior_question_elapsed_time'] = self.train['prior_question_elapsed_time'].fillna(0)
+        self.valid['prior_question_elapsed_time'] = self.valid['prior_question_elapsed_time'].fillna(0)
+
+        features_dicts = self.create_dics()
+
+        self.train , _ = self.add_past_feature(self.train, features_dicts)
+        self.valid , create_feats = self.add_past_feature(self.valid, features_dicts)
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
+
+
+        with open(f'./features/all_data/loop_feats_rolling_mean2.dill','wb') as f:
+            dill.dump(features_dicts,f)
+
+class ROLLING_PART_MEAN3(Feature):
 
     # rolling mean
     def create_user_ans_rolling_part_mean(self,num,user_id,part,
@@ -779,7 +958,7 @@ class ROLLING_PART_MEAN(Feature):
     def update_user_part_ans_list(self,user_id,target,part,
                                   features_dicts,
                                   n):
-        if len(features_dicts[f'user_past_part_ans_{n}'][user_id]) == n:
+        if len(features_dicts[f'user_past_part_ans_{n}'][user_id][part]) == n:
             features_dicts[f'user_past_part_ans_{n}'][user_id][part] = features_dicts[f'user_past_part_ans_{n}'][user_id][part][1:]
             features_dicts[f'user_past_part_ans_{n}'][user_id][part] += str(target)
         else:
@@ -865,6 +1044,7 @@ class ROLLING_PART_MEAN(Feature):
                 self.update_previous(features_dicts,previous_df)
                 previous_df = []
                 update_cnt = 0
+                update = False
 
             if (update) & (previous_row is not None):
                 self.update_feats(previous_row,features_dicts)
@@ -917,7 +1097,7 @@ class ROLLING_PART_MEAN(Feature):
         self.valid = self.valid[create_feats]
 
 
-        with open(f'./features/all_data/loop_feats_rolling_part_mean.dill','wb') as f:
+        with open(f'./features/all_data/loop_feats_rolling_part_mean3.dill','wb') as f:
             dill.dump(features_dicts,f)
 
 
