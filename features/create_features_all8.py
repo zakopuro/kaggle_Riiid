@@ -181,19 +181,33 @@ class GROUP_BY(Feature):
 
 
 
+class TIME(Feature):
+
+    def create_features(self):
+        create_feats = ['days_elapsed','hour_elapsed']
+
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_FIX_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_FIX_valid.feather')
+
+        self.train['days_elapsed'] = self.train['timestamp']/(1000*3600*24)
+        self.valid['days_elapsed'] = self.valid['timestamp']/(1000*3600*24)
+        self.train['days_elapsed'] = self.train['days_elapsed'].astype(int)
+        self.valid['days_elapsed'] = self.valid['days_elapsed'].astype(int)
+
+        self.train['hour_elapsed'] = self.train['timestamp']/(1000*3600)
+        self.valid['hour_elapsed'] = self.valid['timestamp']/(1000*3600)
+        self.train['hour_elapsed'] = self.train['hour_elapsed'].astype(int)
+        self.valid['hour_elapsed'] = self.valid['hour_elapsed'].astype(int)
+
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
 
 
 
 
 
-
-
-
-
-
-
-
-class LOOP_FIX_TIME3(Feature):
+class LOOP_FIX_TIME4(Feature):
 
     # User 組み合わせ特徴量更新
     def update_user_arg_feats(self,user_id,col,target,
@@ -371,33 +385,75 @@ class LOOP_FIX_TIME3(Feature):
             feats_np_dic['lag_incorrect_time'][num] = timestamp - features_dicts['lag_user_incorrect_time'][user_id][0]
 
 
-    def update_lag_time_mean_feats(self,user_id,timestamp,
-                                   features_dicts):
+    def update_todays_count_feats(self,user_id,timestamp,target,
+                                  features_dicts):
+
+        n = len(features_dicts['lag_user_time'][user_id]) - 1
 
         if len(features_dicts['lag_user_time'][user_id]) == 0:
-            features_dicts['lag_time_1_sum'][user_id] = 0
+            features_dicts['todays_qs_count'][user_id] += 1
+            features_dicts['todays_qs_sum'][user_id] += target
 
-        elif len(features_dicts['lag_user_time'][user_id]) == 1:
-            features_dicts['lag_time_1_sum'][user_id] += timestamp - features_dicts['lag_user_time'][user_id][0]
-
-        elif len(features_dicts['lag_user_time'][user_id]) == 2:
-            features_dicts['lag_time_1_sum'][user_id] += timestamp - features_dicts['lag_user_time'][user_id][1]
-
-        elif len(features_dicts['lag_user_time'][user_id]) == 3:
-            features_dicts['lag_time_1_sum'][user_id] += timestamp - features_dicts['lag_user_time'][user_id][2]
-
-
-    def create_lag_time_mean_feats(self,num,user_id,timestamp,
-                                   features_dicts,
-                                   feats_np_dic):
-
-        if features_dicts['user_list'][user_id][0] >= 2:
-            feats_np_dic['lag_time_1_mean'][num] = features_dicts['lag_time_1_sum'][user_id] / (features_dicts['user_list'][user_id][0] - 1)
-            feats_np_dic['lag_time_1_sum'][num] = features_dicts['lag_time_1_sum'][user_id]
         else:
-            feats_np_dic['lag_time_1_mean'][num] = np.nan
-            feats_np_dic['lag_time_1_sum'][num] = np.nan
+            if (int(timestamp/(1000*3600*24))) == (int(features_dicts['lag_user_time'][user_id][n]/(1000*3600*24))):
+                features_dicts['todays_qs_count'][user_id] += 1
+                features_dicts['todays_qs_sum'][user_id] += target
+            else:
+                features_dicts['todays_qs_count'][user_id] = 1
+                features_dicts['todays_qs_sum'][user_id] = target
 
+
+    def update_consecutive_days(self,user_id,timestamp,
+                                  features_dicts):
+        n = len(features_dicts['lag_user_time'][user_id]) - 1
+
+        if len(features_dicts['lag_user_time'][user_id]) == 0:
+            features_dicts['consecutive_days_count'][user_id] += 1
+
+        else:
+            if ((int(timestamp/(1000*3600*24)))-1) == (int(features_dicts['lag_user_time'][user_id][n]/(1000*3600*24))):
+                features_dicts['consecutive_days_count'][user_id] += 1
+                print('*'*100)
+            else:
+                features_dicts['consecutive_days_count'][user_id] = 0
+
+
+
+
+    def create_todays_count_feats(self,num,user_id,timestamp,prev_day,
+                                  features_dicts,
+                                  feats_np_dic):
+
+        # TODO:
+        if prev_day != int(timestamp/(1000*3600*24)):
+                features_dicts['todays_qs_count'][user_id] = 0
+                features_dicts['todays_qs_sum'][user_id] = 0
+
+        if len(features_dicts['lag_user_time'][user_id]) == 0:
+            feats_np_dic['todays_qs_count'][num] = 0
+            feats_np_dic['todays_qs_avg'][num] = np.nan
+        else:
+            if prev_day != int(timestamp/(1000*3600*24)):
+                feats_np_dic['todays_qs_count'][num] = 0
+                feats_np_dic['todays_qs_avg'][num] = np.nan
+            else:
+                feats_np_dic['todays_qs_count'][num] = features_dicts['todays_qs_count'][user_id]
+                if features_dicts['todays_qs_sum'][user_id] == 0:
+                    feats_np_dic['todays_qs_avg'][num] = np.nan
+                else:
+                    feats_np_dic['todays_qs_avg'][num] = features_dicts['todays_qs_sum'][user_id] / features_dicts['todays_qs_count'][user_id]
+
+
+    def create_consecutive_days(self,num,user_id,timestamp,prev_day,
+                                  features_dicts,
+                                  feats_np_dic):
+        if len(features_dicts['lag_user_time'][user_id]) == 0:
+            feats_np_dic['consecutive_days_count'][num] = 0
+        else:
+            if prev_day == int(timestamp/(1000*3600*24)):
+                feats_np_dic['consecutive_days_count'][num] = 0
+            else:
+                feats_np_dic['consecutive_days_count'][num] = features_dicts['consecutive_days_count'][user_id]
 
 
     def update_part_lag_time_feats(self,user_id,part,timestamp,
@@ -475,16 +531,21 @@ class LOOP_FIX_TIME3(Feature):
                                   features_dicts,
                                   n=4)
 
+        self.update_todays_count_feats(user_id,timestamp,target,
+                                           features_dicts)
+
+        # self.update_consecutive_days(user_id,timestamp,
+        #                             features_dicts)
 
         if time_update:
-            self.update_lag_time_mean_feats(user_id,timestamp,
-                                            features_dicts)
 
             self.update_lag_time_feats(user_id,timestamp,
                                     features_dicts)
 
             self.update_part_lag_time_feats(user_id,part,timestamp,
                                             features_dicts)
+
+
             create_lists = [[user_id,
                             'user_list'],
                             [content_id,
@@ -536,15 +597,17 @@ class LOOP_FIX_TIME3(Feature):
                     'lag_part_time_3',
                     # User Part
                     'ans_user_part_avg',
-                    'lag_time_1_sum',
-                    'lag_time_1_mean'
+
+                    'todays_qs_avg'
         ]
 
         df_name_int_list = [
                     # User Content
                     'user_content_count',
                     # User Part
-                    'user_part_count'
+                    'user_part_count',
+                    'todays_qs_count',
+                    'consecutive_days_count'
         ]
 
         feats_np_dic = {}
@@ -565,7 +628,7 @@ class LOOP_FIX_TIME3(Feature):
         update_cnt = 0
         previous_df = []
 
-
+        prev_day = None
         for num, row in enumerate(tqdm(df[['user_id', 'answered_correctly', 'content_id', 'prior_question_elapsed_time',
                                             'prior_question_had_explanation', 'timestamp','bundle_id','part','community']].values)):
             # メモリ削減のため型変換
@@ -639,6 +702,7 @@ class LOOP_FIX_TIME3(Feature):
                                             features_dicts,
                                             feats_np_dic)
 
+
             # # rolling mean
             # self.create_user_ans_rolling_mean(num,user_id,target,
             #                                   features_dicts,
@@ -677,10 +741,16 @@ class LOOP_FIX_TIME3(Feature):
             # User count
             feats_np_dic['ans_user_count'][num] = features_dicts['user_list'][user_id][0]
 
-
-            self.create_lag_time_mean_feats(num,user_id,timestamp,
+            self.create_todays_count_feats(num,user_id,timestamp,prev_day,
                                             features_dicts,
                                             feats_np_dic)
+
+            # self.create_consecutive_days(num,user_id,timestamp,prev_day,
+            #                             features_dicts,
+            #                             feats_np_dic)
+
+            prev_day = int(timestamp/(1000*3600*24))
+
 
             # Update
             # ------------------------------------------------------------------
@@ -717,8 +787,10 @@ class LOOP_FIX_TIME3(Feature):
         ]
 
         int_name = [
-                    'lag_time_1_sum'
-        ]
+                    'todays_qs_count',
+                    'todays_qs_sum'
+                    # 'consecutive_days_count'
+                    ]
 
 
         lambda_int_name = [
@@ -736,12 +808,11 @@ class LOOP_FIX_TIME3(Feature):
                     'user_part_list'
         ]
 
+        for name in int_name:
+            features_dicts[name] = defaultdict(int)
 
         for name in list_name:
             features_dicts[name] = defaultdict(list)
-
-        for name in int_name:
-            features_dicts[name] = defaultdict(int)
 
         for name in lambda_int_name:
             features_dicts[name] = defaultdict(lambda: defaultdict(int))
@@ -757,6 +828,13 @@ class LOOP_FIX_TIME3(Feature):
 
         self.train = pd.read_feather(f'./{Feature.dir}/BASE_FIX_train.feather')
         self.valid = pd.read_feather(f'./{Feature.dir}/BASE_FIX_valid.feather')
+        # time_train = pd.read_feather(f'./{Feature.dir}/TIME_train.feather')
+        # time_valid = pd.read_feather(f'./{Feature.dir}/TIME_valid.feather')
+
+        # self.train = pd.concat([self.train,time_train],axis=1)
+        # self.valid = pd.concat([self.valid,time_valid],axis=1)
+        # del time_train,time_valid;gc.collect()
+
         self.train['prior_question_elapsed_time'] = self.train['prior_question_elapsed_time'].fillna(0)
         self.valid['prior_question_elapsed_time'] = self.valid['prior_question_elapsed_time'].fillna(0)
 
@@ -769,8 +847,44 @@ class LOOP_FIX_TIME3(Feature):
         self.valid = self.valid[create_feats]
 
 
-        with open(f'./features/all_data/loop_feats7.dill','wb') as f:
+        with open(f'./features/all_data/loop_feats8.dill','wb') as f:
             dill.dump(features_dicts,f)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -964,6 +1078,7 @@ class ROLLING_MEAN2(Feature):
         with open(f'./features/all_data/loop_feats_rolling_mean2.dill','wb') as f:
             dill.dump(features_dicts,f)
 
+
 class ROLLING_PART_MEAN3(Feature):
 
     # rolling mean
@@ -1125,6 +1240,31 @@ class ROLLING_PART_MEAN3(Feature):
 
 
 
+
+
+class CONTENT_ID(Feature):
+
+    def create_features(self):
+        create_feats = ['content_cut_mean']
+
+        self.train = pd.read_feather(f'./{Feature.dir}/BASE_FIX_train.feather')
+        self.valid = pd.read_feather(f'./{Feature.dir}/BASE_FIX_valid.feather')
+
+        top_content = pd.read_csv('./data/input/top_content_ids.csv')
+
+        self.train['content_cut'] = self.train['content_id']
+        self.valid['content_cut'] = self.valid['content_id']
+
+        self.train.loc[(~self.train['content_cut'].isin(top_content['content_id'])), 'content_cut'] = 99999
+        self.valid.loc[(~self.valid['content_cut'].isin(top_content['content_id'])), 'content_cut'] = 99999
+
+        content_cut_mean = self.train[[TARGET,'content_cut']].groupby('content_cut').mean().reset_index()
+        content_cut_mean.columns = ['content_cut','content_cut_mean']
+        self.train = pd.merge(self.train,content_cut_mean,on='content_cut',how='left')
+        self.valid = pd.merge(self.valid,content_cut_mean,on='content_cut',how='left')
+
+        self.train = self.train[create_feats]
+        self.valid = self.valid[create_feats]
 
 
 if __name__ == "__main__":

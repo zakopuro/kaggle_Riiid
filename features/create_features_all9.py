@@ -193,7 +193,7 @@ class GROUP_BY(Feature):
 
 
 
-class LOOP_FIX_TIME3(Feature):
+class LOOP_FIX_TIME5(Feature):
 
     # User 組み合わせ特徴量更新
     def update_user_arg_feats(self,user_id,col,target,
@@ -448,7 +448,10 @@ class LOOP_FIX_TIME3(Feature):
         bundle_id = int(previous_row[6])
         part = int(previous_row[7])
         community = int(previous_row[8])
-
+        try:
+            tags1 = int(previous_row[9])
+        except:
+            tags1 = previous_row[9]
 
         # lag time
         self.update_lag_incorrect_feats(user_id,timestamp,target,
@@ -468,7 +471,10 @@ class LOOP_FIX_TIME3(Feature):
         create_lists = [[user_id,
                         'user_list'],
                         [content_id,
-                        'content_list']]
+                        'content_list'],
+                        [tags1,
+                        'tags1_list']
+                        ]
         for create_list in create_lists:
             self.update_args_feats(create_list[0],create_list[1],
                                   target,
@@ -488,7 +494,10 @@ class LOOP_FIX_TIME3(Feature):
             create_lists = [[user_id,
                             'user_list'],
                             [content_id,
-                            'content_list']]
+                            'content_list'],
+                            [tags1,
+                            'tags1_list']
+                            ]
             for create_list in create_lists:
                 self.update_args_time_feats(create_list[0],prior_question_elapsed_time,prior_question_had_explanation,
                                 features_dicts,
@@ -525,6 +534,10 @@ class LOOP_FIX_TIME3(Feature):
                     'ans_content_avg',
                     'elapsed_time_content_avg',
                     'explanation_content_avg',
+                    # tags1
+                    'ans_tags1_avg',
+                    'elapsed_time_tags1_avg',
+                    'explanation_tags1_avg',
                     # user lag time
                     'lag_time_1',
                     'lag_time_2',
@@ -567,7 +580,7 @@ class LOOP_FIX_TIME3(Feature):
 
 
         for num, row in enumerate(tqdm(df[['user_id', 'answered_correctly', 'content_id', 'prior_question_elapsed_time',
-                                            'prior_question_had_explanation', 'timestamp','bundle_id','part','community']].values)):
+                                            'prior_question_had_explanation', 'timestamp','bundle_id','part','community','tags1']].values)):
             # メモリ削減のため型変換
             user_id = int(row[0])
             target = int(row[1])
@@ -578,6 +591,13 @@ class LOOP_FIX_TIME3(Feature):
             bundle_id = int(row[6])
             part = int(row[7])
             community = int(row[8])
+
+            try:
+                tags1 = int(row[9])
+            except:
+                tags1 = row[9]
+
+
 
             update = _update
             # 前回とbundle_idが同じ時は更新しない
@@ -609,7 +629,10 @@ class LOOP_FIX_TIME3(Feature):
                             'ans_user_avg','elapsed_time_user_avg','explanation_user_avg','elapsed_time_user_sum'],                                 # np
                             [content_id,
                             'content_list',     # dic
-                            'ans_content_avg','elapsed_time_content_avg','explanation_content_avg',None]                        # np
+                            'ans_content_avg','elapsed_time_content_avg','explanation_content_avg',None],                        # np
+                            [tags1,
+                            'tags1_list',
+                            'ans_tags1_avg','elapsed_time_tags1_avg','explanation_tags1_avg',None]
                             ]
 
 
@@ -711,6 +734,8 @@ class LOOP_FIX_TIME3(Feature):
                     'user_list', # 'ans_user_count','ans_user_sum','elapsed_time_user_sum','explanation_user_sum','user_first_bundle'
                     # content_id
                     'content_list', # 'ans_content_count','ans_content_sum','elapsed_time_content_sum','explanation_content_sum'
+                    # tags1
+                    'tags1_list',# 'ans_tags1_count','ans_tags1_sum','elapsed_time_tags1_sum','explanation_tags1_sum'
                     # User Time
                     'lag_user_time',
                     'lag_user_incorrect_time'
@@ -769,8 +794,36 @@ class LOOP_FIX_TIME3(Feature):
         self.valid = self.valid[create_feats]
 
 
-        with open(f'./features/all_data/loop_feats7.dill','wb') as f:
+        with open(f'./features/all_data/loop_feats9.dill','wb') as f:
             dill.dump(features_dicts,f)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
